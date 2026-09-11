@@ -5,6 +5,7 @@ import {
   GraduationCap, BarChart3, Menu, X, Compass, Star, MapPin,
   User, LogOut, UserPlus, Plus, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff,
 } from "lucide-react";
+import { SCHOOLS, STUDENTS_BY_SCHOOL } from "./schoolsData";
 
 // Points at the deployed backend on Render. In production, Vercel injects
 // VITE_API_BASE (set it in Project Settings → Environment Variables).
@@ -12,8 +13,9 @@ import {
 // back to whichever host served this page, on port 4000 — so local dev
 // still works both at localhost AND when opened from another device via
 // your laptop's network IP (e.g. http://192.168.1.5:5173).
-const API_BASE =
-  import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:4000`;
+const API_BASE = (
+  import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:4000`
+).replace(/\/+$/, ""); // strip trailing slash(es) so paths never end up double-slashed
 
 async function apiFetch(path, { method = "GET", body, token } = {}) {
   let res;
@@ -418,13 +420,21 @@ function AccountPanel({
   selectedStudentId,
   onSelectStudent,
   onAddStudent,
+  onRemoveStudent,
   authLoading,
   authError,
 }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", email: "", password: "", schoolName: "" });
-  const [newStudent, setNewStudent] = useState({ name: "", classLevel: "3" });
+  const [newStudentName, setNewStudentName] = useState("");
+  const [newStudentClass, setNewStudentClass] = useState("3");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Students already on this teacher's roster, so they can't be picked again
+  // from the dropdown below.
+  const takenNames = new Set(students.map((s) => s.name));
+  const schoolRoster = STUDENTS_BY_SCHOOL[teacher?.school_name] || [];
+  const availableStudents = schoolRoster.filter((s) => !takenNames.has(s.name));
 
   function submitAuth(e) {
     e.preventDefault();
@@ -437,9 +447,11 @@ function AccountPanel({
 
   function submitStudent(e) {
     e.preventDefault();
-    if (!newStudent.name.trim()) return;
-    onAddStudent(newStudent);
-    setNewStudent({ name: "", classLevel: "3" });
+    if (!newStudentName) return;
+    const picked = schoolRoster.find((s) => s.name === newStudentName);
+    if (!picked) return;
+    onAddStudent({ name: picked.name, classLevel: String(picked.classLevel) });
+    setNewStudentName("");
   }
 
   if (!teacher) {
@@ -491,14 +503,23 @@ function AccountPanel({
                   </div>
                 </label>
                 <label>
-                  School <span className="label-optional">(optional)</span>
+                  School
                   <div className="input-wrap">
                     <BookOpen size={16} />
-                    <input
-                      placeholder="e.g. Govt. Primary School, T. Nagar"
+                    <select
+                      required
                       value={form.schoolName}
                       onChange={(e) => setForm({ ...form, schoolName: e.target.value })}
-                    />
+                    >
+                      <option value="" disabled>
+                        Select your school
+                      </option>
+                      {SCHOOLS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </label>
               </>
@@ -582,37 +603,46 @@ function AccountPanel({
           )}
           <div className="student-list">
             {students.map((s) => (
-              <button
+              <div
                 key={s.id}
                 className={"student-row" + (s.id === selectedStudentId ? " student-row-active" : "")}
-                onClick={() => onSelectStudent(s.id)}
               >
-                <span className="student-avatar">
-                  <User size={14} />
-                </span>
-                <span className="student-name">{s.name}</span>
-                <span className="student-class">Class {s.class_level}</span>
-              </button>
+                <button className="student-row-main" onClick={() => onSelectStudent(s.id)}>
+                  <span className="student-avatar">
+                    <User size={14} />
+                  </span>
+                  <span className="student-name">{s.name}</span>
+                  <span className="student-class">Class {s.class_level}</span>
+                </button>
+                <button
+                  className="student-remove"
+                  title="Remove from this session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveStudent(s.id);
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
             ))}
           </div>
 
           <form onSubmit={submitStudent} className="add-student-form">
-            <input
-              placeholder="Student name"
-              value={newStudent.name}
-              onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-            />
             <select
-              value={newStudent.classLevel}
-              onChange={(e) => setNewStudent({ ...newStudent, classLevel: e.target.value })}
+              value={newStudentName}
+              onChange={(e) => setNewStudentName(e.target.value)}
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((c) => (
-                <option key={c} value={c}>
-                  Class {c}
+              <option value="">
+                {availableStudents.length ? "Select a student" : "No more students at this school"}
+              </option>
+              {availableStudents.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name} (Class {s.classLevel})
                 </option>
               ))}
             </select>
-            <button className="btn-primary" type="submit">
+            <button className="btn-primary" type="submit" disabled={!newStudentName}>
               <Plus size={15} /> Add
             </button>
           </form>
@@ -641,20 +671,13 @@ export default function App() {
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [syncError, setSyncError] = useState("");
 
-  async function loadStudents(token) {
-    setStudentsLoading(true);
-    try {
-      const data = await apiFetch("/api/students", { token });
-      setStudents(data.students);
-      if (data.students.length > 0 && !selectedStudentId) {
-        setSelectedStudentId(data.students[0].id);
-      }
-    } catch (err) {
-      setSyncError(err.message);
-    } finally {
-      setStudentsLoading(false);
-    }
-  }
+  // NOTE: students are intentionally NOT fetched from the backend on
+  // login/register. Each session starts with an empty roster in the UI —
+  // adding a student still persists it (and all their progress) to the
+  // backend permanently, but a fresh login won't re-show previously added
+  // students. This is deliberate, not a bug: the backend keeps the full
+  // history of students and what they did, but the "who's active right
+  // now" list is session-scoped on the frontend.
 
   async function handleLogin({ email, password }) {
     setAuthLoading(true);
@@ -666,7 +689,6 @@ export default function App() {
       });
       setTeacher(data.teacher);
       setAccessToken(data.accessToken);
-      loadStudents(data.accessToken);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -684,7 +706,6 @@ export default function App() {
       });
       setTeacher(data.teacher);
       setAccessToken(data.accessToken);
-      loadStudents(data.accessToken);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -717,6 +738,16 @@ export default function App() {
     } catch (err) {
       setSyncError(err.message);
     }
+  }
+
+  // Removes a student from THIS session's visible list only. Does not call
+  // any delete endpoint — the student row and all their recorded progress
+  // stay in the backend permanently. This just lets a teacher undo an
+  // accidental add, or tidy up who's shown as "currently in session"
+  // without losing any activity history server-side.
+  function handleRemoveStudent(id) {
+    setStudents((prev) => prev.filter((s) => s.id !== id));
+    setSelectedStudentId((prev) => (prev === id ? null : prev));
   }
 
   async function handleSelectStudent(id) {
@@ -1411,15 +1442,29 @@ export default function App() {
         .muted-text { font-size: 13px; color: var(--ink-soft); }
         .student-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
         .student-row {
-          display: flex; align-items: center; gap: 10px;
+          display: flex; align-items: stretch; gap: 6px;
           background: var(--paper);
           border: 1.5px solid var(--line);
           border-radius: 10px;
-          padding: 9px 12px;
-          cursor: pointer;
-          text-align: left;
+          padding: 4px;
         }
         .student-row-active { border-color: var(--marigold); background: #FFF7E8; }
+        .student-row-main {
+          flex: 1;
+          display: flex; align-items: center; gap: 10px;
+          padding: 5px 8px;
+          cursor: pointer;
+          text-align: left;
+          background: none; border: none;
+        }
+        .student-remove {
+          display: flex; align-items: center; justify-content: center;
+          width: 30px; border-radius: 8px;
+          background: none; border: none;
+          color: var(--ink-soft); cursor: pointer;
+          flex-shrink: 0;
+        }
+        .student-remove:hover { background: var(--line); color: var(--ink); }
         .student-avatar {
           width: 26px; height: 26px; border-radius: 50%;
           background: var(--chalk); color: var(--white);
@@ -1572,6 +1617,7 @@ export default function App() {
             selectedStudentId={selectedStudentId}
             onSelectStudent={handleSelectStudent}
             onAddStudent={handleAddStudent}
+            onRemoveStudent={handleRemoveStudent}
             authLoading={authLoading}
             authError={authError}
           />

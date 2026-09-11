@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const pool = require("../db/pool");
 const { signAccessToken } = require("../middleware/auth");
+const { SCHOOLS } = require("../data/schools");
 
 const router = express.Router();
 
@@ -47,6 +48,9 @@ router.post("/register", async (req, res) => {
   if (!name || !email || !password) {
     return res.status(400).json({ error: "name, email, and password are required" });
   }
+  if (!schoolName || !SCHOOLS.includes(schoolName)) {
+    return res.status(400).json({ error: "Please select a valid school from the list" });
+  }
   if (password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
@@ -65,7 +69,7 @@ router.post("/register", async (req, res) => {
     const result = await pool.query(
       `INSERT INTO teachers (name, email, password_hash, school_name)
        VALUES ($1, $2, $3, $4) RETURNING id, name, email, school_name, created_at`,
-      [name, normalizedEmail, passwordHash, schoolName || null]
+      [name, normalizedEmail, passwordHash, schoolName]
     );
 
     const teacher = result.rows[0];
