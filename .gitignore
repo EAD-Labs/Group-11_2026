@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#dump of the client's data
+backend/assmt_usage_data_dump_*.sql
+backend/migrations/002_legacy_client_data.sql
