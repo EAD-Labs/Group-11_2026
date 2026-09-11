@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth");
 const studentRoutes = require("./routes/students");
 const progressRoutes = require("./routes/progress");
+const analyticsRoutes = require("./routes/analytics");
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);
 // Progress routes are nested under /api/students/:studentId/progress
 app.use("/api/students", progressRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
