@@ -169,4 +169,14 @@ router.post("/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/auth/guest-token - Issues a temporary token with GUEST role for read-only masked analytics
+router.post("/guest-token", (req, res) => {
+  const guestToken = signAccessToken("guest_session", "GUEST", null);
+  res.json({
+    accessToken: guestToken,
+    role: "GUEST",
+    isMasked: true
+  });
+});
+
 module.exports = router;

@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth");
 const studentRoutes = require("./routes/students");
 const progressRoutes = require("./routes/progress");
 const analyticsRoutes = require("./routes/analytics");
+const chatRoutes = require("./routes/chat");
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);
 // Progress routes are nested under /api/students/:studentId/progress
 app.use("/api/students", progressRoutes);
+app.use("/api/analytics/chat", chatRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
@@ -51,6 +53,10 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Kanini Padhai API listening on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Kanini Padhai API listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;

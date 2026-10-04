@@ -283,6 +283,11 @@ Four tables:
 | PATCH/DELETE | `/api/students/:id` | Bearer | update / remove |
 | GET/POST | `/api/students/:id/progress` | Bearer | list / mark complete |
 | DELETE | `/api/students/:id/progress/:resourceKey` | Bearer | un-mark |
+| GET | `/api/analytics/school-performance` | – | School and CS assessment performance averages |
+| GET | `/api/analytics/assessments/overall` | – | Overall class-wise score percentage by year/subject |
+| GET | `/api/analytics/assessments/oral` | – | Oral skill level progression counts by class |
+| GET | `/api/analytics/assessments/written` | – | Question-by-question written test difficulty |
+| POST | `/api/analytics/chat` | – | Llama 3.3 70B AI Copilot with tool execution & dynamic UI layout |
 
 Anything unmatched returns `404 { error: "Not found" }`; unhandled errors return `500 { error: "Something went wrong" }` (stack traces are logged server-side only, never sent to the client).
 
@@ -372,7 +377,7 @@ Two intentionally distinct visual systems, by design:
 
 - **Environment variables that must be set:**
   - **Frontend (Vercel):** `VITE_API_BASE` — the Render backend's full URL (e.g. `https://asha-kanini.onrender.com`, no trailing slash — though the code now strips one defensively either way).
-  - **Backend (Render):** `DATABASE_URL`, `JWT_ACCESS_SECRET` (generate with `openssl rand -hex 32`), `CORS_ORIGINS` (the Vercel domain), `NODE_ENV=production`, `PGSSL` (leave default/true for managed Postgres).
+  - **Backend (Render):** `DATABASE_URL`, `JWT_ACCESS_SECRET` (generate with `openssl rand -hex 32`), `GROQ_API_KEY` (from console.groq.com for Llama 3.3 70B AI visualizer), `CORS_ORIGINS` (the Vercel domain), `NODE_ENV=production`, `PGSSL` (leave default/true for managed Postgres).
 
 ---
 

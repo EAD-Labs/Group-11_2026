@@ -1080,6 +1080,9 @@ export default function Analytics() {
           </div>
         </div>
         <div className="header-actions">
+          <a href="/insights" className="back-link" style={{ background: 'rgba(94, 234, 212, 0.12)', borderColor: '#5EEAD4', color: '#5EEAD4', fontWeight: 600 }}>
+            ✨ AI Visualizer
+          </a>
           <a href="/" className="back-link">← Back to Dashboard</a>
           <span className="sample-badge">Sample data export · {DATA.kpis.yearRange[0]}–{DATA.kpis.yearRange[1]}</span>
         </div>

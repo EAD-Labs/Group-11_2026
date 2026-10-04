@@ -689,6 +689,7 @@ export default function App() {
       });
       setTeacher(data.teacher);
       setAccessToken(data.accessToken);
+      localStorage.setItem("kp_token", data.accessToken);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -706,6 +707,7 @@ export default function App() {
       });
       setTeacher(data.teacher);
       setAccessToken(data.accessToken);
+      localStorage.setItem("kp_token", data.accessToken);
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -721,6 +723,7 @@ export default function App() {
     }
     setTeacher(null);
     setAccessToken(null);
+    localStorage.removeItem("kp_token");
     setStudents([]);
     setSelectedStudentId(null);
     setCompleted(new Set());
