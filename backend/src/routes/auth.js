@@ -169,6 +169,149 @@ router.post("/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
+const { OAuth2Client } = require("google-auth-library");
+const { ROLES, rbacMiddleware } = require("../middleware/rbac");
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// POST /api/auth/google — Verify Google ID token and return Kanini Padhai JWT session
+router.post("/google", async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) {
+    return res.status(400).json({ error: "Google credential ID token is required" });
+  }
+
+  let payload = null;
+  try {
+    if (process.env.GOOGLE_CLIENT_ID) {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } else if (process.env.NODE_ENV !== "production") {
+      // In local dev without GOOGLE_CLIENT_ID, allow decoding payload
+      const parts = credential.split(".");
+      if (parts.length === 3) {
+        payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+      } else {
+        payload = JSON.parse(credential);
+      }
+    } else {
+      return res.status(500).json({ error: "Google OAuth is not configured on this server." });
+    }
+  } catch (err) {
+    console.error("Google token verification error:", err.message);
+    return res.status(401).json({ error: "Invalid Google credentials: " + err.message });
+  }
+
+  if (!payload || !payload.email) {
+    return res.status(400).json({ error: "Unable to extract email from Google credential token." });
+  }
+
+  const normalizedEmail = String(payload.email).trim().toLowerCase();
+  const adminEmails = (process.env.ADMIN_EMAILS || "arjoe.basak@gmail.com")
+    .toLowerCase()
+    .split(",")
+    .map((e) => e.trim());
+
+  let role = ROLES.GUEST;
+  let schoolId = null;
+
+  try {
+    const teacherRes = await pool.query(
+      "SELECT id, name, email, school_name FROM teachers WHERE email = $1",
+      [normalizedEmail]
+    );
+    let teacher = teacherRes.rows[0];
+
+    // Role resolution logic:
+    // 1. Specified admin emails (default includes arjoe.basak@gmail.com) -> ADMIN
+    // 2. Pre-registered teachers with school assignment or Asha organization accounts (@asha.org) -> ASHATEACHER
+    // 3. Others -> GUEST (masked data, safe exploration)
+    if (adminEmails.includes(normalizedEmail)) {
+      role = ROLES.ADMIN;
+    } else if (normalizedEmail.endsWith("@asha.org") || (teacher && teacher.school_name)) {
+      role = ROLES.ASHATEACHER;
+    } else {
+      role = process.env.GOOGLE_OAUTH_DEFAULT_ROLE || ROLES.GUEST;
+    }
+
+    // Auto-provision teacher profile if not yet in database
+    if (!teacher) {
+      try {
+        const insertRes = await pool.query(
+          `INSERT INTO teachers (name, email, password_hash, school_name)
+           VALUES ($1, $2, 'GOOGLE_OAUTH_USER', $3)
+           ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id, name, email, school_name`,
+          [payload.name || normalizedEmail.split("@")[0], normalizedEmail, null]
+        );
+        teacher = insertRes.rows[0];
+      } catch (insertErr) {
+        console.warn("Could not upsert teacher record for OAuth user:", insertErr.message);
+      }
+    }
+
+    const teacherId = teacher?.id || payload.sub || normalizedEmail;
+    const accessToken = signAccessToken(teacherId, role, schoolId);
+
+    if (teacher?.id && typeof teacher.id === "string" && teacher.id.length === 36) {
+      try {
+        const refreshToken = await issueRefreshToken(teacher.id);
+        setRefreshCookie(res, refreshToken);
+      } catch (refErr) {
+        console.warn("Could not issue refresh token:", refErr.message);
+      }
+    }
+
+    const isMasked = [ROLES.GUEST, ROLES.ADMIN_REPORTS].includes(role);
+
+    return res.json({
+      accessToken,
+      role,
+      schoolId,
+      isMasked,
+      user: {
+        id: teacherId,
+        name: payload.name || teacher?.name || normalizedEmail.split("@")[0],
+        email: normalizedEmail,
+        picture: payload.picture,
+        role,
+        isMasked
+      }
+    });
+  } catch (dbErr) {
+    console.error("Database error during Google OAuth:", dbErr);
+    return res.status(500).json({ error: "Failed to authenticate Google user." });
+  }
+});
+
+// GET /api/auth/me — Returns current authenticated user and role scope
+router.get("/me", rbacMiddleware({ required: true }), async (req, res) => {
+  try {
+    const teacherId = req.userScope?.teacherId;
+    let teacher = null;
+    if (teacherId) {
+      const result = await pool.query(
+        "SELECT id, name, email, school_name FROM teachers WHERE id::text = $1 OR email = $1",
+        [teacherId]
+      );
+      teacher = result.rows[0];
+    }
+
+    res.json({
+      user: teacher || { id: teacherId, role: req.userScope.role },
+      role: req.userScope.role,
+      schoolId: req.userScope.schoolId,
+      isMasked: req.userScope.isMasked
+    });
+  } catch (err) {
+    console.error("auth me error", err);
+    res.status(500).json({ error: "Could not retrieve user profile" });
+  }
+});
+
 // POST /api/auth/guest-token - Issues a temporary token with GUEST role for read-only masked analytics
 router.post("/guest-token", (req, res) => {
   const guestToken = signAccessToken("guest_session", "GUEST", null);

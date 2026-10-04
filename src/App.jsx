@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { GoogleLogin } from "@react-oauth/google";
 import {
   Play, Gamepad2, FileText, BookOpen, Sparkles, ClipboardList,
   Search, CheckCircle2, Circle, ExternalLink, ChevronLeft,
@@ -414,6 +415,7 @@ function AccountPanel({
   teacher,
   onLogin,
   onRegister,
+  onGoogleLogin,
   onLogout,
   students,
   studentsLoading,
@@ -486,6 +488,24 @@ function AccountPanel({
               Create account
             </button>
           </div>
+
+          {onGoogleLogin && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", margin: "16px 0 10px 0" }}>
+              <GoogleLogin
+                onSuccess={(credentialResponse) => onGoogleLogin(credentialResponse.credential)}
+                onError={() => {}}
+                theme="outline"
+                shape="pill"
+                size="medium"
+                text={mode === "login" ? "signin_with" : "signup_with"}
+              />
+              <div style={{ display: "flex", alignItems: "center", width: "100%", gap: "8px", color: "var(--muted, #94A3B8)", fontSize: "0.78rem" }}>
+                <div style={{ flex: 1, height: "1px", background: "var(--border, rgba(0,0,0,0.1))" }} />
+                <span>or with email</span>
+                <div style={{ flex: 1, height: "1px", background: "var(--border, rgba(0,0,0,0.1))" }} />
+              </div>
+            </div>
+          )}
 
           <form onSubmit={submitAuth} className="account-form">
             {mode === "register" && (
@@ -715,6 +735,40 @@ export default function App() {
     }
   }
 
+  async function handleGoogleLogin(credential) {
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const data = await apiFetch("/api/auth/google", {
+        method: "POST",
+        body: { credential },
+      });
+      setTeacher(data.user);
+      setAccessToken(data.accessToken);
+      localStorage.setItem("kp_token", data.accessToken);
+      localStorage.setItem("kp_user", JSON.stringify(data.user));
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  // Restore session from localStorage if present
+  useEffect(() => {
+    const token = localStorage.getItem("kp_token");
+    if (token) {
+      setAccessToken(token);
+      apiFetch("/api/auth/me", { token })
+        .then((data) => {
+          if (data && data.user) {
+            setTeacher(data.user);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   async function handleLogout() {
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
@@ -724,6 +778,7 @@ export default function App() {
     setTeacher(null);
     setAccessToken(null);
     localStorage.removeItem("kp_token");
+    localStorage.removeItem("kp_user");
     setStudents([]);
     setSelectedStudentId(null);
     setCompleted(new Set());
@@ -1614,6 +1669,7 @@ export default function App() {
             teacher={teacher}
             onLogin={handleLogin}
             onRegister={handleRegister}
+            onGoogleLogin={handleGoogleLogin}
             onLogout={handleLogout}
             students={students}
             studentsLoading={studentsLoading}

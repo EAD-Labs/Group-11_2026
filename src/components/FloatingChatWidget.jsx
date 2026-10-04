@@ -86,7 +86,7 @@ export default function FloatingChatWidget() {
                   Asha AI Visualizer
                 </h4>
                 <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                  Open-Source AI Copilot
+                  Gemini & Open-Source AI Copilot
                 </div>
               </div>
             </div>

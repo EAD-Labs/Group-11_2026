@@ -25,7 +25,8 @@ function requireAuth(req, res, next) {
 }
 
 function signAccessToken(teacherId, role = "ASHATEACHER", schoolId = null) {
-  return jwt.sign({ sub: teacherId, role, schoolId }, ACCESS_SECRET, { expiresIn: "15m" });
+  const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
+  return jwt.sign({ sub: teacherId, role, schoolId }, ACCESS_SECRET, { expiresIn });
 }
 
 module.exports = { requireAuth, signAccessToken };

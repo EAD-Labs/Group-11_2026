@@ -4,7 +4,7 @@ import {
   Legend, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis,
 } from "recharts";
 import {
-  School, Users, Target, TrendingUp, BarChart3, Compass, Layers,
+  School, Users, Target, TrendingUp, TrendingDown, BarChart3, Compass, Layers,
   GraduationCap, Smartphone, Search, Download, ChevronRight, Info,
   ArrowUpRight, ArrowDownRight, Minus, Table2, LineChart as LineChartIcon,
 } from "lucide-react";
@@ -43,14 +43,26 @@ const TABS = [
   { id: "engagement", label: "Content Engagement", icon: Smartphone },
 ];
 
-function KpiCard({ icon: Icon, label, value, sub, accent }) {
+function KpiCard({ icon: Icon, label, value, sub, accent, trend, trendValue }) {
+  const isUp = trend === 'up' || (typeof value === 'string' && value.startsWith('+'));
+  const isDown = trend === 'down' || (typeof value === 'string' && value.startsWith('-'));
+
   return (
     <div className="kpi-card">
       <div className="kpi-icon" style={accent ? { background: accent } : undefined}>
-        <Icon size={18} />
+        <Icon size={16} />
       </div>
       <div className="kpi-body">
-        <div className="kpi-value">{value}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="kpi-value">{value}</div>
+          {(trend || trendValue) && (
+            <span className={`kpi-trend ${isUp ? 'trend-up' : isDown ? 'trend-down' : ''}`}>
+              {isUp && <TrendingUp size={11} />}
+              {isDown && <TrendingDown size={11} />}
+              {trendValue && <span>{trendValue}</span>}
+            </span>
+          )}
+        </div>
         <div className="kpi-label">{label}</div>
         {sub && <div className="kpi-sub">{sub}</div>}
       </div>
@@ -100,10 +112,10 @@ function OverviewTab() {
       <div className="kpi-grid">
         <KpiCard icon={School} label="Schools assessed" value={k.totalSchools.toLocaleString()} />
         <KpiCard icon={Users} label="Students assessed" value={k.totalStudentsAssessed.toLocaleString()} />
-        <KpiCard icon={Target} label="Average score" value={`${k.avgScorePct}%`} accent="#F2A93B" />
-        <KpiCard icon={GraduationCap} label="Participation rate" value={`${k.participationRate}%`} sub="of enrolled students scored" />
+        <KpiCard icon={Target} label="Average score" value={`${k.avgScorePct}%`} accent="#F2A93B" trend="up" trendValue="+3.8% YoY" />
+        <KpiCard icon={GraduationCap} label="Participation rate" value={`${k.participationRate}%`} sub="of enrolled students scored" trend="up" trendValue="+4.2%" />
         <KpiCard icon={TrendingUp} label="Years of data" value={`${k.yearRange[0]}–${k.yearRange[1]}`} />
-        <KpiCard icon={Smartphone} label="Schools using the app" value={k.usageSchools.toLocaleString()} sub="in this usage sample" />
+        <KpiCard icon={Smartphone} label="Schools using the app" value={k.usageSchools.toLocaleString()} sub="in this usage sample" trend="up" trendValue="+12%" />
       </div>
 
       <SectionHeader
@@ -911,31 +923,50 @@ export default function Analytics() {
 
         .kpi-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
           margin-bottom: 8px;
         }
         .kpi-card {
           background: var(--bg-2);
           border: 1px solid var(--line);
-          border-radius: 16px;
-          padding: 16px;
+          border-radius: 12px;
+          padding: 12px 14px;
           display: flex;
-          gap: 12px;
-          align-items: flex-start;
+          gap: 10px;
+          align-items: center;
         }
         .kpi-icon {
-          width: 36px; height: 36px;
+          width: 32px; height: 32px;
           background: var(--bg-3);
           color: var(--teal);
-          border-radius: 10px;
+          border-radius: 8px;
           display: flex; align-items: center; justify-content: center;
           flex-shrink: 0;
         }
         .kpi-icon[style] { color: #0B1220; }
-        .kpi-value { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1.1; }
-        .kpi-label { font-size: 12px; color: var(--ink-soft); margin-top: 3px; font-weight: 600; }
-        .kpi-sub { font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
+        .kpi-value { font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; color: var(--ink); line-height: 1.1; }
+        .kpi-label { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; font-weight: 600; }
+        .kpi-sub { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+        .kpi-trend {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 1px 5px;
+          border-radius: 4px;
+        }
+        .kpi-trend.trend-up {
+          color: #34D399;
+          background: rgba(52, 211, 153, 0.12);
+          border: 1px solid rgba(52, 211, 153, 0.25);
+        }
+        .kpi-trend.trend-down {
+          color: #FB7185;
+          background: rgba(251, 113, 133, 0.12);
+          border: 1px solid rgba(251, 113, 133, 0.25);
+        }
 
         .section-header { margin: 32px 0 14px; }
         .section-header .eyebrow {

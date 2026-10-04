@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Groq = require('groq-sdk');
+const { GoogleGenAI } = require('@google/genai');
 const analyticsTools = require('../services/analyticsTools');
 const { rbacMiddleware, maskData } = require('../middleware/rbac');
 
@@ -434,11 +435,18 @@ Your mission is twofold:
 1. Thoroughly investigate the assessment and performance data by selecting and invoking the right database tools.
 2. Synthesize actionable insights AND design a custom dynamic visual layout (charts, KPI cards, tables) that intuitively presents the findings to teachers, coordinators, and directors.
 
+DATABASE & CLASS CONTEXT:
+- Asha Kanini partner schools primarily focus on primary education (Classes 1 through 5).
+- Written assessment scores (MaxMarks > 0) are recorded for Classes 2, 3, 4, and 5 spanning academic years 2016 through 2022.
+- Class 1 assessments are competency-based / oral milestones (MaxMarks = 0), so they do not have percentage scores for written tests.
+- Classes 6 through 8 have assessment paper definitions in the system, but currently have no recorded student marks.
+- When asked to analyze scores across classes or "all classes", evaluate Classes 2 through 5, and explain this educational context clearly if asked.
+
 AVAILABLE ANALYSIS TOOLS:
 - School & CS Averages
 - Gender Performance (Boys vs Girls)
 - Medium Comparison (Tamil vs English Medium)
-- Subject-wise comparison & multi-year trends
+- Subject-wise comparison & multi-year trends (get_multi_year_trend returns both overall_trend and class_breakdown)
 - Socio-demographic factors: Mother/Father Education, Preschool education, Homework regularity, Pupil-Teacher Ratio, Attendance correlation, Mini School attendance.
 
 DYNAMIC UI INSTRUCTION:
@@ -451,6 +459,61 @@ Once all tool data has been collected, your final response MUST be a JSON object
     "widgets": [
       // 1 to 4 widgets tailored to display the data most intuitively:
       // Widget types: "kpi", "bar_chart", "line_chart", "table"
+      
+      // 1. KPI Calling Cards (metrics/percentages):
+      // {
+      //   "type": "kpi",
+      //   "title": "Maths 2020 Average",
+      //   "value": "43.2%",
+      //   "trend": "up" | "down" | "neutral", // "up" for growth/improvement, "down" for decrease/decline
+      //   "change": "+4.3%",                  // YoY or relative change percentage if known (e.g. "+3.7%", "-2.1%")
+      //   "sub": "vs 38.9% in 2019",          // concise contextual baseline or note
+      //   "color": "teal" | "emerald" | "amber" | "rose" | "violet"
+      // }
+      
+      // 2. Line Chart:
+      // When comparing multiple classes, subjects, or groups over time, ALWAYS use multi-series lines
+      // so users can see each group's trajectory simultaneously:
+      // {
+      //   "type": "line_chart",
+      //   "title": "Year-on-Year Maths Progression by Class (2018 - 2020)",
+      //   "xKey": "year",
+      //   "series": [
+      //     { "key": "Class 2", "name": "Class 2", "color": "#60A5FA" },
+      //     { "key": "Class 3", "name": "Class 3", "color": "#34D399" },
+      //     { "key": "Class 4", "name": "Class 4", "color": "#F59E0B" },
+      //     { "key": "Class 5", "name": "Class 5", "color": "#FB7185" },
+      //     { "key": "Overall", "name": "Overall Avg", "color": "#A78BFA" }
+      //   ],
+      //   "data": [
+      //     { "year": "2018", "Class 2": 45.4, "Class 3": 39.0, "Class 4": 39.8, "Class 5": 42.7, "Overall": 41.5 },
+      //     { "year": "2019", "Class 2": 45.1, "Class 3": 52.0, "Class 4": 31.4, "Class 5": 44.7, "Overall": 43.2 },
+      //     { "year": "2020", "Class 2": 43.5, "Class 3": 33.4, "Class 4": 40.0, "Class 5": 37.5, "Overall": 38.9 }
+      //   ]
+      // }
+      
+      // 3. Bar Chart (for category / school / subject distributions in a single period):
+      // {
+      //   "type": "bar_chart",
+      //   "title": "Subject Performance Comparison (2020)",
+      //   "xKey": "subject",
+      //   "yKey": "value",
+      //   "data": [
+      //     { "subject": "Maths", "value": 43.2 },
+      //     { "subject": "English", "value": 51.0 }
+      //   ]
+      // }
+      
+      // 4. Table Widget (for tabular breakdown with YoY delta changes):
+      // {
+      //   "type": "table",
+      //   "title": "Class-wise Maths Performance Breakdown",
+      //   "columns": ["Class", "2018 Avg", "2019 Avg", "2020 Avg", "2018-19 Change", "2019-20 Change"],
+      //   "data": [
+      //     { "Class": "Class 2", "2018 Avg": "45.4%", "2019 Avg": "45.1%", "2020 Avg": "43.5%", "2018-19 Change": "-0.3%", "2019-20 Change": "-1.6%" },
+      //     { "Class": "Class 3", "2018 Avg": "39.0%", "2019 Avg": "52.0%", "2020 Avg": "33.4%", "2018-19 Change": "+13.0%", "2019-20 Change": "-18.6%" }
+      //   ]
+      // }
     ]
   }
 }
@@ -462,10 +525,621 @@ Choose layout_type:
 Always make sure the data in widgets is accurately derived from the tool execution results.
 `;
 
-// Strict authentication enforced by default; guests receive masked data
+// Schema format adapted for @google/genai Function Declarations
+const geminiTools = [
+  {
+    functionDeclarations: tools.map(t => ({
+      name: t.function.name,
+      description: t.function.description,
+      parametersJsonSchema: t.function.parameters
+    }))
+  }
+];
+
+// Helper to estimate token lengths
+function estimateTokens(textOrObj) {
+  if (!textOrObj) return 0;
+  const str = typeof textOrObj === 'string' ? textOrObj : JSON.stringify(textOrObj);
+  return Math.ceil(str.length / 3.5);
+}
+
+function compactMessages(msgList, maxRowsPerTool = 20) {
+  return msgList.map(m => {
+    if (m.role === 'tool' && typeof m.content === 'string') {
+      try {
+        const parsed = JSON.parse(m.content);
+        if (Array.isArray(parsed) && parsed.length > maxRowsPerTool) {
+          return {
+            ...m,
+            content: JSON.stringify(parsed.slice(0, maxRowsPerTool))
+          };
+        }
+      } catch (e) {}
+    }
+    return m;
+  });
+}
+
+function calculateSafeMaxTokens(msgs, toolDefs, requestedMax = 2000) {
+  const promptTokens = estimateTokens(msgs) + (toolDefs ? estimateTokens(toolDefs) : 0);
+  const remaining = 7400 - promptTokens;
+  return Math.max(600, Math.min(requestedMax, remaining));
+}
+
+// ---------------------------------------------------------------------------
+// Google Gemini Provider Execution Engine
+// ---------------------------------------------------------------------------
+async function runGeminiChat({ prompt, history = [], userScope, apiKey, requestedModel }) {
+  const ai = new GoogleGenAI({ apiKey });
+
+  const modelCandidates = [
+    requestedModel,
+    process.env.GEMINI_MODEL,
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.5-flash"
+  ].filter(Boolean);
+  const uniqueModels = [...new Set(modelCandidates)];
+
+  let activeModel = uniqueModels[0];
+
+  // Convert previous history to Gemini contents structure
+  const contents = [];
+  for (const h of history) {
+    const role = h.role === 'user' ? 'user' : 'model';
+    const text = typeof h.content === 'string' ? h.content : JSON.stringify(h.content);
+    contents.push({
+      role,
+      parts: [{ text }]
+    });
+  }
+  contents.push({
+    role: 'user',
+    parts: [{ text: prompt }]
+  });
+
+  const toolsExecuted = [];
+  const executedSignatures = new Map();
+  let turns = 0;
+  const MAX_SAFETY_TURNS = 20;
+  const MAX_CONSECUTIVE_FAILURES = 3;
+  let consecutiveFailures = 0;
+
+  async function generateWithFallback(payloadContents, cfg) {
+    let lastErr = null;
+    const candidates = [activeModel, ...uniqueModels.filter(m => m !== activeModel)];
+    for (const m of candidates) {
+      try {
+        const resp = await ai.models.generateContent({
+          model: m,
+          contents: payloadContents,
+          config: cfg
+        });
+        activeModel = m;
+        return resp;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`Gemini model '${m}' failed (${err.message}). Trying next candidate...`);
+      }
+    }
+    throw lastErr;
+  }
+
+  // Initial call with tools
+  let response = await generateWithFallback(contents, {
+    systemInstruction: SYSTEM_PROMPT,
+    tools: geminiTools,
+    temperature: 0.2,
+    maxOutputTokens: 2500
+  });
+
+  while (response.functionCalls && response.functionCalls.length > 0 && turns < MAX_SAFETY_TURNS) {
+    turns++;
+    const candidateContent = response.candidates?.[0]?.content;
+    if (candidateContent) {
+      contents.push(candidateContent);
+    }
+
+    let turnHadSuccess = false;
+    let turnHadFailure = false;
+    const functionResponseParts = [];
+
+    for (const call of response.functionCalls) {
+      const functionName = call.name;
+      const functionArgs = call.args || {};
+      const callSignature = `${functionName}:${JSON.stringify(functionArgs)}`;
+      const callCount = (executedSignatures.get(callSignature) || 0) + 1;
+      executedSignatures.set(callSignature, callCount);
+
+      let toolResult;
+      const isRedundantSingleYear = functionName === 'get_gender_performance' && functionArgs.year &&
+        Array.from(executedSignatures.keys()).some(sig =>
+          sig.startsWith('get_gender_performance') &&
+          sig.includes(`"subject":"${functionArgs.subject}"`) &&
+          (!sig.includes('"year":20') || sig.includes('"year":null'))
+        );
+
+      if (isRedundantSingleYear) {
+        toolResult = {
+          status: "already_available",
+          message: `All academic years and classes for subject '${functionArgs.subject}' have already been provided in your multi-year result. Do not query individual years. Synthesize your final analysis now.`
+        };
+        turnHadSuccess = true;
+        toolsExecuted.push({
+          tool: functionName,
+          args: functionArgs,
+          status: "skipped_redundant",
+          message: toolResult.message
+        });
+      } else if (callCount > 2) {
+        turnHadFailure = true;
+        toolResult = {
+          status: "duplicate_warning",
+          message: `You have called '${functionName}' with identical arguments ${JSON.stringify(functionArgs)} ${callCount} times. Re-calling this will yield identical results. Please utilize previously retrieved data or formulate a different query.`
+        };
+        toolsExecuted.push({
+          tool: functionName,
+          args: functionArgs,
+          status: "duplicate",
+          warning: toolResult.message
+        });
+      } else {
+        try {
+          const rawResult = await executeTool(functionName, functionArgs, userScope);
+          turnHadSuccess = true;
+
+          if (Array.isArray(rawResult)) {
+            if (rawResult.length === 0) {
+              toolResult = {
+                status: "empty",
+                count: 0,
+                message: `Query executed successfully but returned 0 records for ${JSON.stringify(functionArgs)}. Verify specified filters.`
+              };
+            } else {
+              toolResult = rawResult.length > 30 ? rawResult.slice(0, 30) : rawResult;
+            }
+          } else {
+            toolResult = rawResult;
+          }
+
+          toolsExecuted.push({
+            tool: functionName,
+            args: functionArgs,
+            status: "success",
+            recordCount: Array.isArray(rawResult) ? rawResult.length : 1
+          });
+        } catch (err) {
+          turnHadFailure = true;
+          const hint = getToolCallHint(functionName, functionArgs, err.message);
+          toolResult = { status: "error", error: err.message, hint };
+          toolsExecuted.push({
+            tool: functionName,
+            args: functionArgs,
+            status: "failed",
+            error: err.message,
+            hint
+          });
+        }
+      }
+
+      functionResponseParts.push({
+        functionResponse: {
+          name: functionName,
+          id: call.id,
+          response: { output: toolResult }
+        }
+      });
+    }
+
+    contents.push({
+      role: 'user',
+      parts: functionResponseParts
+    });
+
+    if (turnHadFailure && !turnHadSuccess) {
+      consecutiveFailures++;
+    } else {
+      consecutiveFailures = 0;
+    }
+
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: "Notice: Multiple consecutive queries returned errors or empty data. Please synthesize your final response now using the available information." }]
+      });
+    }
+
+    response = await generateWithFallback(contents, {
+      systemInstruction: SYSTEM_PROMPT,
+      tools: geminiTools,
+      temperature: 0.2,
+      maxOutputTokens: 2500
+    });
+  }
+
+  let finalContent = response.text || "";
+  let parsedResult = null;
+
+  try {
+    parsedResult = JSON.parse(finalContent);
+  } catch (e) {
+    const jsonMatch = finalContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try {
+        parsedResult = JSON.parse(jsonMatch[1]);
+      } catch (e2) {}
+    }
+  }
+
+  if (!parsedResult || !parsedResult.ui_layout) {
+    try {
+      const formatResponse = await generateWithFallback([
+        ...contents,
+        ...(response.candidates?.[0]?.content ? [response.candidates[0].content] : []),
+        {
+          role: 'user',
+          parts: [{ text: "Synthesize your complete analysis into the strict JSON format specified in the system prompt with 'summary', 'detailed_analysis', and 'ui_layout'. Output ONLY valid JSON." }]
+        }
+      ], {
+        systemInstruction: SYSTEM_PROMPT,
+        temperature: 0.1,
+        responseMimeType: "application/json"
+      });
+      const fmtText = formatResponse.text || "";
+      try {
+        parsedResult = JSON.parse(fmtText);
+      } catch (err) {
+        const m = fmtText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (m) parsedResult = JSON.parse(m[1]);
+      }
+    } catch (fallbackErr) {
+      console.warn("Gemini JSON formatting fallback error:", fallbackErr.message);
+    }
+  }
+
+  if (!parsedResult || !parsedResult.ui_layout) {
+    parsedResult = {
+      summary: "Assessment analysis completed.",
+      detailed_analysis: finalContent || "Analysis complete.",
+      ui_layout: { layout_type: "grid", widgets: [] }
+    };
+  }
+
+  return {
+    provider: "gemini",
+    modelUsed: activeModel,
+    turns,
+    toolsExecuted,
+    parsedResult
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Groq Provider Execution Engine (llama-3.3-70b-versatile & open source models)
+// ---------------------------------------------------------------------------
+async function runGroqChat({ prompt, history = [], userScope, apiKey, requestedModel }) {
+  const groq = new Groq({ apiKey });
+
+  let activeModel = requestedModel || process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+
+  async function createCompletionWithFallback(completionParams) {
+    const candidates = [
+      activeModel,
+      "openai/gpt-oss-120b",
+      "qwen/qwen3.8-27b",
+      "openai/gpt-oss-20b"
+    ].filter(Boolean);
+
+    const uniqueCandidates = [...new Set(candidates)];
+    let lastErr = null;
+
+    let safeParams = { ...completionParams };
+    const estimatedPrompt = estimateTokens(safeParams.messages) + (safeParams.tools ? estimateTokens(safeParams.tools) : 0);
+
+    // Dynamically clamp max_tokens so prompt_tokens + max_tokens stays under Groq's 8,000 TPM limit
+    if (estimatedPrompt + (safeParams.max_tokens || 2048) > 7400) {
+      safeParams.max_tokens = Math.max(600, Math.min(safeParams.max_tokens || 2048, 7400 - estimatedPrompt));
+      if (estimatedPrompt > 4500) {
+        safeParams.messages = compactMessages(safeParams.messages, 15);
+      }
+    }
+
+    for (const m of uniqueCandidates) {
+      let attempts = 0;
+      const maxAttempts = 2;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          const completion = await groq.chat.completions.create({
+            ...safeParams,
+            model: m
+          });
+          activeModel = m;
+          return completion;
+        } catch (err) {
+          lastErr = err;
+          const isModelNotFound = err.status === 404 || 
+            (err.error?.code === 'model_not_found') || 
+            (err.message && err.message.includes('does not exist'));
+
+          if (isModelNotFound) {
+            console.warn(`Groq model '${m}' not available, trying next open-source candidate...`);
+            break;
+          }
+
+          // Check for network connection / DNS blip
+          const isConnErr = err.name === 'APIConnectionError' ||
+            err.code === 'ENOTFOUND' ||
+            err.cause?.code === 'ENOTFOUND' ||
+            (err.message && (err.message.includes('ENOTFOUND') || err.message.includes('fetch failed') || err.message.includes('Connection error')));
+
+          if (isConnErr) {
+            if (attempts < maxAttempts) {
+              console.warn(`Network connection issue reaching Groq on '${m}'. Retrying in 1.5s (attempt ${attempts}/${maxAttempts})...`);
+              await new Promise(r => setTimeout(r, 1500));
+              continue;
+            } else {
+              console.warn(`Network connection failed after ${attempts} attempts on '${m}'.`);
+              break;
+            }
+          }
+
+          // Handle 413 / 429 TPM Rate Limit Exceeded
+          const isRateLimit = err.status === 413 || err.status === 429 ||
+            err.error?.code === 'rate_limit_exceeded' ||
+            (err.message && (err.message.includes('TPM') || err.message.includes('rate_limit_exceeded') || err.message.includes('Request too large')));
+
+          if (isRateLimit) {
+            console.warn(`TPM limit reached on '${m}'. Compacting payload and retrying...`);
+            safeParams.messages = compactMessages(safeParams.messages, 12);
+            safeParams.max_tokens = Math.max(500, Math.min(1200, (safeParams.max_tokens || 1500) - 500));
+
+            try {
+              const retryCompletion = await groq.chat.completions.create({
+                ...safeParams,
+                model: m
+              });
+              activeModel = m;
+              return retryCompletion;
+            } catch (retryErr) {
+              console.warn(`Model '${m}' still rate-limited, trying next candidate model...`);
+              break;
+            }
+          }
+
+          throw err;
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content)
+    })),
+    { role: "user", content: prompt }
+  ];
+
+  const toolsExecuted = [];
+
+  let response = await createCompletionWithFallback({
+    messages,
+    tools,
+    tool_choice: "auto",
+    temperature: 0.2,
+    max_tokens: calculateSafeMaxTokens(messages, tools, 1024)
+  });
+
+  let choice = response.choices[0];
+  let turns = 0;
+  const MAX_SAFETY_TURNS = 25;
+  const MAX_CONSECUTIVE_FAILURES = 3;
+  let consecutiveFailures = 0;
+  const executedSignatures = new Map();
+
+  while (choice.finish_reason === "tool_calls" && choice.message.tool_calls && choice.message.tool_calls.length > 0 && turns < MAX_SAFETY_TURNS) {
+    turns++;
+    messages.push(choice.message);
+
+    let turnHadSuccess = false;
+    let turnHadFailure = false;
+
+    for (const toolCall of choice.message.tool_calls) {
+      const functionName = toolCall.function?.name;
+      let functionArgs = {};
+      try {
+        functionArgs = JSON.parse(toolCall.function.arguments);
+      } catch (e) {
+        functionArgs = {};
+      }
+
+      const callSignature = `${functionName}:${JSON.stringify(functionArgs)}`;
+      const callCount = (executedSignatures.get(callSignature) || 0) + 1;
+      executedSignatures.set(callSignature, callCount);
+
+      let toolResult;
+
+      const isRedundantSingleYear = functionName === 'get_gender_performance' && functionArgs.year &&
+        Array.from(executedSignatures.keys()).some(sig =>
+          sig.startsWith('get_gender_performance') &&
+          sig.includes(`"subject":"${functionArgs.subject}"`) &&
+          (!sig.includes('"year":20') || sig.includes('"year":null'))
+        );
+
+      if (isRedundantSingleYear) {
+        toolResult = {
+          status: "already_available",
+          message: `All academic years and classes for subject '${functionArgs.subject}' have already been provided in your multi-year result. Do not query individual years. Synthesize your final analysis now.`
+        };
+        turnHadSuccess = true;
+        toolsExecuted.push({
+          tool: functionName,
+          args: functionArgs,
+          status: "skipped_redundant",
+          message: toolResult.message
+        });
+      } else if (callCount > 2) {
+        turnHadFailure = true;
+        toolResult = {
+          status: "duplicate_warning",
+          message: `You have called '${functionName}' with identical arguments ${JSON.stringify(functionArgs)} ${callCount} times. Re-calling this will yield identical results. Please utilize previously retrieved data or formulate a different query.`
+        };
+        toolsExecuted.push({
+          tool: functionName,
+          args: functionArgs,
+          status: "duplicate",
+          warning: toolResult.message
+        });
+      } else {
+        try {
+          const rawResult = await executeTool(functionName, functionArgs, userScope);
+          turnHadSuccess = true;
+
+          if (Array.isArray(rawResult)) {
+            if (rawResult.length === 0) {
+              toolResult = {
+                status: "empty",
+                count: 0,
+                message: `Query executed successfully but returned 0 records for ${JSON.stringify(functionArgs)}. Verify specified filters.`
+              };
+            } else {
+              toolResult = rawResult.length > 25 ? rawResult.slice(0, 25) : rawResult;
+            }
+          } else {
+            toolResult = rawResult;
+          }
+
+          toolsExecuted.push({
+            tool: functionName,
+            args: functionArgs,
+            status: "success",
+            recordCount: Array.isArray(rawResult) ? rawResult.length : 1
+          });
+        } catch (err) {
+          turnHadFailure = true;
+          const hint = getToolCallHint(functionName, functionArgs, err.message);
+          toolResult = {
+            status: "error",
+            error: err.message,
+            hint
+          };
+          toolsExecuted.push({
+            tool: functionName,
+            args: functionArgs,
+            status: "failed",
+            error: err.message,
+            hint
+          });
+        }
+      }
+
+      messages.push({
+        tool_call_id: toolCall.id,
+        role: "tool",
+        name: functionName,
+        content: JSON.stringify(toolResult)
+      });
+    }
+
+    if (turnHadFailure && !turnHadSuccess) {
+      consecutiveFailures++;
+    } else {
+      consecutiveFailures = 0;
+    }
+
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      messages.push({
+        role: "user",
+        content: "Notice: Multiple consecutive database queries have failed or produced no data. Please synthesize your final response now using the available information rather than making further database queries."
+      });
+    }
+
+    response = await createCompletionWithFallback({
+      messages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.2,
+      max_tokens: calculateSafeMaxTokens(messages, tools, 1500)
+    });
+
+    choice = response.choices[0];
+  }
+
+  let finalContent = choice.message?.content || "";
+  let parsedResult = null;
+
+  try {
+    parsedResult = JSON.parse(finalContent);
+  } catch (e) {
+    const jsonMatch = finalContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try {
+        parsedResult = JSON.parse(jsonMatch[1]);
+      } catch (e2) {}
+    }
+  }
+
+  if (!parsedResult || !parsedResult.ui_layout) {
+    try {
+      const compactedHistory = compactMessages(messages, 8);
+      const formatPromptMessages = [
+        ...compactedHistory,
+        ...(choice.message ? [choice.message] : []),
+        {
+          role: "user",
+          content: "Synthesize your complete analysis into the strict JSON format specified in the system prompt with 'summary', 'detailed_analysis', and 'ui_layout'. Do not call any more tools."
+        }
+      ];
+
+      const formatResponse = await createCompletionWithFallback({
+        messages: formatPromptMessages,
+        tools,
+        tool_choice: "auto",
+        temperature: 0.1,
+        max_tokens: calculateSafeMaxTokens(formatPromptMessages, tools, 2500)
+      });
+
+      const fmtContent = formatResponse.choices[0]?.message?.content || "";
+      try {
+        parsedResult = JSON.parse(fmtContent);
+      } catch (err) {
+        const m = fmtContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (m) parsedResult = JSON.parse(m[1]);
+      }
+    } catch (fallbackErr) {
+      console.warn("Formatting fallback error:", fallbackErr.message);
+    }
+
+    if (!parsedResult || !parsedResult.ui_layout) {
+      parsedResult = {
+        summary: "Assessment analysis completed.",
+        detailed_analysis: finalContent || "Analysis complete.",
+        ui_layout: { layout_type: "grid", widgets: [] }
+      };
+    }
+  }
+
+  return {
+    provider: "groq",
+    modelUsed: activeModel,
+    turns,
+    toolsExecuted,
+    parsedResult
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Unified POST /api/analytics/chat Route with Multi-Provider Support
+// ---------------------------------------------------------------------------
 router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
   try {
-    const { prompt, history = [] } = req.body;
+    const { prompt, history = [], provider: bodyProvider, model: bodyModel } = req.body;
     const userScope = req.userScope;
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -478,379 +1152,100 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
 
     const sanitizedPrompt = prompt.replace(/\0/g, '').trim();
 
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey || apiKey.startsWith('change-') || apiKey === 'gsk_your_groq_api_key_here') {
+    // Check available API keys strictly from server environment
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+    const hasValidGroq = groqApiKey && !groqApiKey.startsWith('change-') && groqApiKey !== 'gsk_your_groq_api_key_here';
+    const hasValidGemini = geminiApiKey && !geminiApiKey.startsWith('change-') && geminiApiKey.length > 10;
+
+    if (!hasValidGemini && !hasValidGroq) {
       return res.status(503).json({
-        error: "GROQ_API_KEY is not configured in backend/.env. Please generate a key at https://console.groq.com/keys and add it."
+        error: "No AI provider configured. Please provide a GEMINI_API_KEY or GROQ_API_KEY in backend/.env."
       });
     }
 
-    const groq = new Groq({ apiKey });
+    // Determine target provider
+    const requestedProvider = (req.headers['x-llm-provider'] || bodyProvider || process.env.LLM_PROVIDER || '').toLowerCase();
+    let targetProvider = 'gemini';
 
-    let activeModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-
-    function estimateTokens(textOrObj) {
-      if (!textOrObj) return 0;
-      const str = typeof textOrObj === 'string' ? textOrObj : JSON.stringify(textOrObj);
-      return Math.ceil(str.length / 3.5);
+    if (requestedProvider === 'groq') {
+      targetProvider = hasValidGroq ? 'groq' : 'gemini';
+    } else if (requestedProvider === 'gemini') {
+      targetProvider = hasValidGemini ? 'gemini' : 'groq';
+    } else {
+      // Default: favor Gemini when available, fallback to Groq
+      targetProvider = hasValidGemini ? 'gemini' : 'groq';
     }
 
-    function compactMessages(msgList, maxRowsPerTool = 20) {
-      return msgList.map(m => {
-        if (m.role === 'tool' && typeof m.content === 'string') {
-          try {
-            const parsed = JSON.parse(m.content);
-            if (Array.isArray(parsed) && parsed.length > maxRowsPerTool) {
-              return {
-                ...m,
-                content: JSON.stringify(parsed.slice(0, maxRowsPerTool))
-              };
-            }
-          } catch (e) {}
-        }
-        return m;
-      });
-    }
+    let executionResult = null;
 
-    function calculateSafeMaxTokens(msgs, toolDefs, requestedMax = 2000) {
-      const promptTokens = estimateTokens(msgs) + (toolDefs ? estimateTokens(toolDefs) : 0);
-      const remaining = 7400 - promptTokens;
-      return Math.max(600, Math.min(requestedMax, remaining));
-    }
-
-    async function createCompletionWithFallback(completionParams) {
-      const candidates = [
-        activeModel,
-        "openai/gpt-oss-120b",
-        "qwen/qwen3.8-27b",
-        "openai/gpt-oss-20b"
-      ].filter(Boolean);
-
-      const uniqueCandidates = [...new Set(candidates)];
-      let lastErr = null;
-
-      let safeParams = { ...completionParams };
-      const estimatedPrompt = estimateTokens(safeParams.messages) + (safeParams.tools ? estimateTokens(safeParams.tools) : 0);
-
-      // Dynamically clamp max_tokens so prompt_tokens + max_tokens stays under Groq's 8,000 TPM limit
-      if (estimatedPrompt + (safeParams.max_tokens || 2048) > 7400) {
-        safeParams.max_tokens = Math.max(600, Math.min(safeParams.max_tokens || 2048, 7400 - estimatedPrompt));
-        if (estimatedPrompt > 4500) {
-          safeParams.messages = compactMessages(safeParams.messages, 15);
-        }
-      }
-
-      for (const m of uniqueCandidates) {
-        let attempts = 0;
-        const maxAttempts = 2;
-
-        while (attempts < maxAttempts) {
-          attempts++;
-          try {
-            const completion = await groq.chat.completions.create({
-              ...safeParams,
-              model: m
-            });
-            activeModel = m;
-            return completion;
-          } catch (err) {
-            lastErr = err;
-            const isModelNotFound = err.status === 404 || 
-              (err.error?.code === 'model_not_found') || 
-              (err.message && err.message.includes('does not exist'));
-
-            if (isModelNotFound) {
-              console.warn(`Groq model '${m}' not available, trying next open-source candidate...`);
-              break;
-            }
-
-            // Check for network connection / DNS blip
-            const isConnErr = err.name === 'APIConnectionError' ||
-              err.code === 'ENOTFOUND' ||
-              err.cause?.code === 'ENOTFOUND' ||
-              (err.message && (err.message.includes('ENOTFOUND') || err.message.includes('fetch failed') || err.message.includes('Connection error')));
-
-            if (isConnErr) {
-              if (attempts < maxAttempts) {
-                console.warn(`Network connection issue reaching Groq on '${m}'. Retrying in 1.5s (attempt ${attempts}/${maxAttempts})...`);
-                await new Promise(r => setTimeout(r, 1500));
-                continue;
-              } else {
-                console.warn(`Network connection failed after ${attempts} attempts on '${m}'.`);
-                break;
-              }
-            }
-
-            // Handle 413 / 429 TPM Rate Limit Exceeded
-            const isRateLimit = err.status === 413 || err.status === 429 ||
-              err.error?.code === 'rate_limit_exceeded' ||
-              (err.message && (err.message.includes('TPM') || err.message.includes('rate_limit_exceeded') || err.message.includes('Request too large')));
-
-            if (isRateLimit) {
-              console.warn(`TPM limit reached on '${m}'. Compacting payload and retrying...`);
-              safeParams.messages = compactMessages(safeParams.messages, 12);
-              safeParams.max_tokens = Math.max(500, Math.min(1200, (safeParams.max_tokens || 1500) - 500));
-
-              try {
-                const retryCompletion = await groq.chat.completions.create({
-                  ...safeParams,
-                  model: m
-                });
-                activeModel = m;
-                return retryCompletion;
-              } catch (retryErr) {
-                console.warn(`Model '${m}' still rate-limited, trying next candidate model...`);
-                break;
-              }
-            }
-
-            throw err;
-          }
-        }
-      }
-      throw lastErr;
-    }
-
-    const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...history.map(h => ({
-        role: h.role === 'user' ? 'user' : 'assistant',
-        content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content)
-      })),
-      { role: "user", content: sanitizedPrompt }
-    ];
-
-    const toolsExecuted = [];
-
-    // Step 1: Initial call with tools
-    let response = await createCompletionWithFallback({
-      messages,
-      tools,
-      tool_choice: "auto",
-      temperature: 0.2,
-      max_tokens: calculateSafeMaxTokens(messages, tools, 1024)
-    });
-
-    let choice = response.choices[0];
-
-    // Dynamic Tool Calling Loop: No fixed turn limit
-    // Dynamically tracks execution health, inspects failures, detects loops, and guides self-correction
-    let turns = 0;
-    const MAX_SAFETY_TURNS = 25; // Broad safety ceiling to prevent infinite runaway loops
-    const MAX_CONSECUTIVE_FAILURES = 3; // Break if model fails repeatedly without correction
-    let consecutiveFailures = 0;
-    const executedSignatures = new Map(); // Tracks tool call frequency to detect duplicate loops
-
-    while (choice.finish_reason === "tool_calls" && choice.message.tool_calls && choice.message.tool_calls.length > 0 && turns < MAX_SAFETY_TURNS) {
-      turns++;
-      messages.push(choice.message);
-
-      let turnHadSuccess = false;
-      let turnHadFailure = false;
-
-      for (const toolCall of choice.message.tool_calls) {
-        const functionName = toolCall.function?.name;
-        let functionArgs = {};
-        try {
-          functionArgs = JSON.parse(toolCall.function.arguments);
-        } catch (e) {
-          functionArgs = {};
-        }
-
-        const callSignature = `${functionName}:${JSON.stringify(functionArgs)}`;
-        const callCount = (executedSignatures.get(callSignature) || 0) + 1;
-        executedSignatures.set(callSignature, callCount);
-
-        let toolResult;
-        let isSuccess = false;
-
-        // Check if the agent is requesting redundant single years after already fetching longitudinal data
-        const isRedundantSingleYear = functionName === 'get_gender_performance' && functionArgs.year &&
-          Array.from(executedSignatures.keys()).some(sig =>
-            sig.startsWith('get_gender_performance') &&
-            sig.includes(`"subject":"${functionArgs.subject}"`) &&
-            (!sig.includes('"year":20') || sig.includes('"year":null'))
-          );
-
-        if (isRedundantSingleYear) {
-          toolResult = {
-            status: "already_available",
-            message: `All academic years and classes for subject '${functionArgs.subject}' have already been provided in your multi-year result. Do not query individual years. Synthesize your final analysis now.`
-          };
-          turnHadSuccess = true;
-          toolsExecuted.push({
-            tool: functionName,
-            args: functionArgs,
-            status: "skipped_redundant",
-            message: toolResult.message
-          });
-        } else if (callCount > 2) {
-          turnHadFailure = true;
-          toolResult = {
-            status: "duplicate_warning",
-            message: `You have called '${functionName}' with identical arguments ${JSON.stringify(functionArgs)} ${callCount} times. Re-calling this will yield identical results. Please utilize previously retrieved data or formulate a different query.`
-          };
-          toolsExecuted.push({
-            tool: functionName,
-            args: functionArgs,
-            status: "duplicate",
-            warning: toolResult.message
+    if (targetProvider === 'gemini') {
+      try {
+        executionResult = await runGeminiChat({
+          prompt: sanitizedPrompt,
+          history,
+          userScope,
+          apiKey: geminiApiKey,
+          requestedModel: bodyModel
+        });
+      } catch (geminiErr) {
+        if (hasValidGroq) {
+          console.warn("Gemini provider failed, falling back to Groq:", geminiErr.message);
+          executionResult = await runGroqChat({
+            prompt: sanitizedPrompt,
+            history,
+            userScope,
+            apiKey: groqApiKey,
+            requestedModel: bodyModel
           });
         } else {
-          try {
-            // Pass userScope to enforce school isolation if teacher
-            const rawResult = await executeTool(functionName, functionArgs, userScope);
-            isSuccess = true;
-            turnHadSuccess = true;
-
-            if (Array.isArray(rawResult)) {
-              if (rawResult.length === 0) {
-                toolResult = {
-                  status: "empty",
-                  count: 0,
-                  message: `Query executed successfully but returned 0 records for ${JSON.stringify(functionArgs)}. Verify the specified year or filter criteria.`
-                };
-              } else {
-                toolResult = rawResult.length > 25 ? rawResult.slice(0, 25) : rawResult;
-              }
-            } else {
-              toolResult = rawResult;
-            }
-
-            toolsExecuted.push({
-              tool: functionName,
-              args: functionArgs,
-              status: "success",
-              recordCount: Array.isArray(rawResult) ? rawResult.length : 1
-            });
-          } catch (err) {
-            turnHadFailure = true;
-            const hint = getToolCallHint(functionName, functionArgs, err.message);
-            toolResult = {
-              status: "error",
-              error: err.message,
-              hint
-            };
-            toolsExecuted.push({
-              tool: functionName,
-              args: functionArgs,
-              status: "failed",
-              error: err.message,
-              hint
-            });
-          }
+          throw geminiErr;
         }
-
-        messages.push({
-          tool_call_id: toolCall.id,
-          role: "tool",
-          name: functionName,
-          content: JSON.stringify(toolResult)
-        });
       }
-
-      // Track consecutive failure streaks
-      if (turnHadFailure && !turnHadSuccess) {
-        consecutiveFailures++;
-      } else {
-        consecutiveFailures = 0;
-      }
-
-      // Dynamic Break / Guidance: If 3 turns fail consecutively without any progress, nudge to synthesize
-      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        console.warn(`Dynamic loop: ${consecutiveFailures} consecutive tool failures detected. Intervening to prompt synthesis.`);
-        messages.push({
-          role: "user",
-          content: "Notice: Multiple consecutive database queries have failed or produced no data. Please synthesize your final response now using the available information rather than making further database queries."
-        });
-      }
-
-      response = await createCompletionWithFallback({
-        messages,
-        tools,
-        tool_choice: "auto",
-        temperature: 0.2,
-        max_tokens: calculateSafeMaxTokens(messages, tools, 1500)
-      });
-
-      choice = response.choices[0];
-
-      // If the model finishes calling tools, finish_reason will be "stop" and the loop naturally terminates.
-    }
-
-    let finalContent = choice.message?.content || "";
-    let parsedResult = null;
-
-    try {
-      parsedResult = JSON.parse(finalContent);
-    } catch (e) {
-      const jsonMatch = finalContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        try {
-          parsedResult = JSON.parse(jsonMatch[1]);
-        } catch (e2) {}
-      }
-    }
-
-    if (!parsedResult || !parsedResult.ui_layout) {
+    } else {
       try {
-        const compactedHistory = compactMessages(messages, 8);
-        const formatPromptMessages = [
-          ...compactedHistory,
-          ...(choice.message ? [choice.message] : []),
-          {
-            role: "user",
-            content: "Synthesize your complete analysis into the strict JSON format specified in the system prompt with 'summary', 'detailed_analysis', and 'ui_layout'. Do not call any more tools."
-          }
-        ];
-
-        const formatResponse = await createCompletionWithFallback({
-          messages: formatPromptMessages,
-          tools,
-          tool_choice: "auto",
-          temperature: 0.1,
-          max_tokens: calculateSafeMaxTokens(formatPromptMessages, tools, 2500)
+        executionResult = await runGroqChat({
+          prompt: sanitizedPrompt,
+          history,
+          userScope,
+          apiKey: groqApiKey,
+          requestedModel: bodyModel
         });
-
-        const fmtContent = formatResponse.choices[0]?.message?.content || "";
-        try {
-          parsedResult = JSON.parse(fmtContent);
-        } catch (err) {
-          const m = fmtContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-          if (m) parsedResult = JSON.parse(m[1]);
+      } catch (groqErr) {
+        if (hasValidGemini) {
+          console.warn("Groq provider failed, falling back to Gemini:", groqErr.message);
+          executionResult = await runGeminiChat({
+            prompt: sanitizedPrompt,
+            history,
+            userScope,
+            apiKey: geminiApiKey,
+            requestedModel: bodyModel
+          });
+        } else {
+          throw groqErr;
         }
-      } catch (fallbackErr) {
-        console.warn("Formatting fallback error:", fallbackErr.message);
-      }
-
-      if (!parsedResult || !parsedResult.ui_layout) {
-        parsedResult = {
-          summary: "Assessment analysis completed.",
-          detailed_analysis: finalContent || "Analysis complete.",
-          ui_layout: { layout_type: "grid", widgets: [] }
-        };
       }
     }
 
     // Apply strict data masking for restricted roles (GUEST, ADMIN-REPORTS)
-    const secureResult = maskData(parsedResult, userScope);
+    const secureResult = maskData(executionResult.parsedResult, userScope);
 
-    // Compute tool execution health metrics
     const toolStats = {
-      totalTurns: turns,
-      totalCalls: toolsExecuted.length,
-      successfulCalls: toolsExecuted.filter(t => t.status === "success").length,
-      failedCalls: toolsExecuted.filter(t => t.status === "failed").length,
-      duplicateCalls: toolsExecuted.filter(t => t.status === "duplicate").length
+      totalTurns: executionResult.turns,
+      totalCalls: executionResult.toolsExecuted.length,
+      successfulCalls: executionResult.toolsExecuted.filter(t => t.status === "success").length,
+      failedCalls: executionResult.toolsExecuted.filter(t => t.status === "failed").length,
+      duplicateCalls: executionResult.toolsExecuted.filter(t => t.status === "duplicate").length
     };
 
     return res.json({
       success: true,
-      modelUsed: activeModel,
+      provider: executionResult.provider,
+      modelUsed: executionResult.modelUsed,
       userRole: userScope?.role,
       isMasked: !!userScope?.isMasked,
       toolStats,
-      toolsExecuted,
+      toolsExecuted: executionResult.toolsExecuted,
       ...secureResult
     });
 
@@ -863,7 +1258,7 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
 
     if (isConnErr) {
       return res.status(503).json({
-        error: "Network connection error: Unable to reach the AI service (api.groq.com). Please verify your internet connection, DNS, or VPN settings and try again."
+        error: "Network connection error: Unable to reach AI service. Please verify your internet connection, DNS, or VPN settings and try again."
       });
     }
 

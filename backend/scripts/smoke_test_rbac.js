@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const http = require('http');
 const { signAccessToken } = require('../src/middleware/auth');
 const app = require('../src/index');

@@ -259,11 +259,11 @@ async function getMediumComparison(year, scope) {
 }
 
 /**
- * 4. Multi-Year Longitudinal Performance Trend
+ * 4. Multi-Year Longitudinal Performance Trend (Overall and Class-wise)
  */
 async function getMultiYearTrend(subject, scope) {
   const sc = applyScope(2, scope);
-  const query = `
+  const overallQuery = `
     SELECT 
       arg."AcademicYear" as year,
       ROUND(AVG(sc."Marks" / ap."MaxMarks" * 100)::numeric, 1) as avg_percentage,
@@ -278,12 +278,40 @@ async function getMultiYearTrend(subject, scope) {
     GROUP BY arg."AcademicYear"
     ORDER BY arg."AcademicYear" ASC
   `;
-  const { rows } = await pool.query(query, [subject, ...sc.params]);
-  return rows.map(r => ({
-    year: r.year,
-    avg_percentage: parseFloat(r.avg_percentage),
-    student_count: parseInt(r.student_count, 10)
-  }));
+  const classQuery = `
+    SELECT 
+      arg."AcademicYear" as year,
+      ap."Class" as class,
+      ROUND(AVG(sc."Marks" / ap."MaxMarks" * 100)::numeric, 1) as avg_percentage,
+      COUNT(DISTINCT sc."SchoolStudentID") as student_count
+    FROM "assessmentscores" sc
+    JOIN "assessmentresultgroup" arg ON sc."AssessmentResultID" = arg."AssessmentResultID"
+    JOIN "assessmentpaper" ap ON arg."AssessmentPaperID" = ap."AssessmentPaperID"
+    WHERE ap."Subject" = $1 
+      AND ap."MaxMarks" > 0 
+      AND sc."Marks" IS NOT NULL
+      ${sc.clause}
+    GROUP BY arg."AcademicYear", ap."Class"
+    ORDER BY arg."AcademicYear" ASC, ap."Class" ASC
+  `;
+  const [overallRes, classRes] = await Promise.all([
+    pool.query(overallQuery, [subject, ...sc.params]),
+    pool.query(classQuery, [subject, ...sc.params])
+  ]);
+
+  return {
+    overall_trend: overallRes.rows.map(r => ({
+      year: r.year,
+      avg_percentage: parseFloat(r.avg_percentage),
+      student_count: parseInt(r.student_count, 10)
+    })),
+    class_breakdown: classRes.rows.map(r => ({
+      year: r.year,
+      class: r.class,
+      avg_percentage: parseFloat(r.avg_percentage),
+      student_count: parseInt(r.student_count, 10)
+    }))
+  };
 }
 
 /**

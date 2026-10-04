@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { GoogleLogin } from '@react-oauth/google';
 import {
   Sparkles,
   Send,
@@ -11,7 +12,9 @@ import {
   ChevronUp,
   RefreshCw,
   Lightbulb,
-  FileText
+  FileText,
+  User,
+  LogOut
 } from 'lucide-react';
 import DynamicVisualizer from './components/DynamicVisualizer';
 
@@ -33,6 +36,67 @@ export default function InsightsPage() {
   const [error, setError] = useState(null);
   const [showDetailed, setShowDetailed] = useState(true);
 
+  // User & Authentication State
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('kp_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [role, setRole] = useState(() => user?.role || 'GUEST');
+
+  // AI Provider State
+  const [provider, setProvider] = useState(() => localStorage.getItem('kp_provider') || 'gemini');
+
+  // Check user session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('kp_token');
+    if (token && !user) {
+      fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include'
+      })
+        .then(async (res) => {
+          if (res.ok) return res.json();
+          if (res.status === 401) {
+            // Attempt auto-refresh via refresh token cookie
+            try {
+              const refRes = await fetch(`${API_BASE}/api/auth/refresh`, {
+                method: 'POST',
+                credentials: 'include'
+              });
+              if (refRes.ok) {
+                const refData = await refRes.json();
+                if (refData.accessToken) {
+                  localStorage.setItem('kp_token', refData.accessToken);
+                  const meRes = await fetch(`${API_BASE}/api/auth/me`, {
+                    headers: { Authorization: `Bearer ${refData.accessToken}` }
+                  });
+                  if (meRes.ok) return meRes.json();
+                }
+              }
+            } catch (e) {}
+            // If refresh fails, purge stale expired tokens cleanly
+            localStorage.removeItem('kp_token');
+            localStorage.removeItem('kp_user');
+            setUser(null);
+            setRole('GUEST');
+          }
+          return null;
+        })
+        .then(data => {
+          if (data && data.user) {
+            setUser(data.user);
+            setRole(data.role);
+            localStorage.setItem('kp_user', JSON.stringify(data.user));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Check if a query was passed in the URL (e.g. from the floating widget)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -43,37 +107,165 @@ export default function InsightsPage() {
     }
   }, []);
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setError(null);
+      const res = await fetch(`${API_BASE}/api/auth/google`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: credentialResponse.credential })
+      });
+      const data = await res.json();
+      if (res.ok && data.accessToken) {
+        localStorage.setItem('kp_token', data.accessToken);
+        localStorage.setItem('kp_user', JSON.stringify(data.user));
+        setUser(data.user);
+        setRole(data.role);
+      } else {
+        setError(data.error || 'Failed to authenticate with Google.');
+      }
+    } catch (err) {
+      console.error('Google auth error', err);
+      setError(err.message || 'Network error verifying Google credentials.');
+    }
+  };
+
+  const handleQuickLogin = async (targetRole) => {
+    try {
+      setError(null);
+      if (targetRole === 'GUEST') {
+        const guestRes = await fetch(`${API_BASE}/api/auth/guest-token`, { method: 'POST' });
+        const data = await guestRes.json();
+        localStorage.setItem('kp_token', data.accessToken);
+        const guestUser = { name: 'Guest Explorer', email: 'guest@asha.org', role: 'GUEST' };
+        localStorage.setItem('kp_user', JSON.stringify(guestUser));
+        setUser(guestUser);
+        setRole('GUEST');
+        return;
+      }
+
+      const email = targetRole === 'ADMIN' ? 'arjoe.basak@gmail.com' : 'teacher@asha.org';
+      const name = targetRole === 'ADMIN' ? 'Arjoe Basak (Admin)' : 'Asha Teacher';
+      const mockToken = btoa(JSON.stringify({ alg: "none" })) + "." + 
+                        btoa(JSON.stringify({ email, name, picture: '' })) + ".sig";
+
+      const res = await fetch(`${API_BASE}/api/auth/google`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: mockToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.accessToken) {
+        localStorage.setItem('kp_token', data.accessToken);
+        localStorage.setItem('kp_user', JSON.stringify(data.user));
+        setUser(data.user);
+        setRole(data.role);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('kp_token');
+    localStorage.removeItem('kp_user');
+    setUser(null);
+    setRole('GUEST');
+  };
+
   const handleExecuteQuery = async (queryText) => {
     const q = (queryText || prompt).trim();
     if (!q) return;
 
     setLoading(true);
     setError(null);
-    setStatusMsg('AI Copilot is analyzing query & selecting tools...');
+    setStatusMsg(`Asha AI (${provider === 'gemini' ? 'Gemini 2.5 Flash' : 'Groq 120B'}) is analyzing query & selecting tools...`);
 
     try {
-      // Use existing teacher token or request a guest token
       let token = localStorage.getItem('kp_token');
       if (!token) {
         try {
           const guestRes = await fetch(`${API_BASE}/api/auth/guest-token`, { method: 'POST' });
           const guestData = await guestRes.json();
           token = guestData.accessToken;
+          localStorage.setItem('kp_token', token);
         } catch (e) {
           // ignore
         }
       }
 
-      const headers = { 'Content-Type': 'application/json' };
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-llm-provider': provider
+      };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const res = await fetch(`${API_BASE}/api/analytics/chat`, {
+      let res = await fetch(`${API_BASE}/api/analytics/chat`, {
         method: 'POST',
+        credentials: 'include',
         headers,
-        body: JSON.stringify({ prompt: q })
+        body: JSON.stringify({
+          prompt: q,
+          provider
+        })
       });
+
+      // Handle token expiration seamlessly
+      if (res.status === 401) {
+        // 1. Try refresh endpoint
+        try {
+          const refRes = await fetch(`${API_BASE}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          if (refRes.ok) {
+            const refData = await refRes.json();
+            if (refData.accessToken) {
+              token = refData.accessToken;
+              localStorage.setItem('kp_token', token);
+              headers['Authorization'] = `Bearer ${token}`;
+              res = await fetch(`${API_BASE}/api/analytics/chat`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+                body: JSON.stringify({ prompt: q, provider })
+              });
+            }
+          }
+        } catch (e) {}
+
+        // 2. If still 401, check if user session was active or fallback to guest
+        if (res.status === 401) {
+          const wasLoggedIn = !!user && user.role !== 'GUEST';
+          localStorage.removeItem('kp_token');
+          if (!wasLoggedIn) {
+            // Silently request fresh guest token and retry
+            try {
+              const guestRes = await fetch(`${API_BASE}/api/auth/guest-token`, { method: 'POST' });
+              const guestData = await guestRes.json();
+              token = guestData.accessToken;
+              localStorage.setItem('kp_token', token);
+              headers['Authorization'] = `Bearer ${token}`;
+              res = await fetch(`${API_BASE}/api/analytics/chat`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+                body: JSON.stringify({ prompt: q, provider })
+              });
+            } catch (e) {}
+          } else {
+            // Active session expired
+            localStorage.removeItem('kp_user');
+            setUser(null);
+            setRole('GUEST');
+            throw new Error('Your session has expired. Please sign in again with Google to continue as ADMIN.');
+          }
+        }
+      }
 
       const data = await res.json();
 
@@ -82,6 +274,7 @@ export default function InsightsPage() {
       }
 
       setResult(data);
+      if (data.userRole) setRole(data.userRole);
     } catch (err) {
       setError(err.message || 'Error executing AI analysis');
     } finally {
@@ -98,6 +291,8 @@ export default function InsightsPage() {
   return (
     <div style={{
       minHeight: '100vh',
+      width: '100%',
+      boxSizing: 'border-box',
       background: 'var(--bg, #0F1729)',
       color: '#F8FAFC',
       fontFamily: "'Inter', sans-serif",
@@ -109,13 +304,15 @@ export default function InsightsPage() {
         background: 'rgba(26, 37, 64, 0.8)',
         backdropFilter: 'blur(12px)',
         borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        padding: '16px 28px',
+        padding: '14px 28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
-        zIndex: 50
+        zIndex: 50,
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <a
@@ -174,36 +371,118 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {result?.userRole && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.75rem',
-              background: result.isMasked ? 'rgba(245, 158, 11, 0.12)' : 'rgba(52, 211, 153, 0.12)',
-              color: result.isMasked ? '#F59E0B' : '#34D399',
-              border: `1px solid ${result.isMasked ? 'rgba(245, 158, 11, 0.3)' : 'rgba(52, 211, 153, 0.3)'}`,
-              padding: '4px 10px',
-              borderRadius: '20px'
-            }}>
-              <span>Role: {result.userRole} {result.isMasked ? '(PII Masked)' : '(Full Access)'}</span>
-            </div>
-          )}
+        {/* Controls: AI Provider Selector + Google Auth Pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* AI Engine Selector */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            fontSize: '0.75rem',
-            background: 'rgba(94, 234, 212, 0.1)',
-            color: '#5EEAD4',
-            border: '1px solid rgba(94, 234, 212, 0.25)',
+            gap: '8px',
+            background: 'rgba(255, 255, 255, 0.04)',
             padding: '4px 10px',
-            borderRadius: '20px'
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <Cpu size={12} />
-            <span>{result?.modelUsed || 'Open-Source AI (120B / 70B)'}</span>
+            <Cpu size={14} style={{ color: provider === 'gemini' ? '#5EEAD4' : '#60A5FA' }} />
+            <select
+              value={provider}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                localStorage.setItem('kp_provider', e.target.value);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#F8FAFC',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="gemini" style={{ background: '#1E293B', color: '#F8FAFC' }}>Gemini (Google AI Suite - 1M TPM)</option>
+              <option value="groq" style={{ background: '#1E293B', color: '#F8FAFC' }}>Groq (Open-Source 120B/70B)</option>
+            </select>
           </div>
+
+          {/* User Profile or Google Sign In */}
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                {user.picture ? (
+                  <img src={user.picture} alt="" style={{ width: '22px', height: '22px', borderRadius: '50%' }} />
+                ) : (
+                  <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                )}
+                <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#F8FAFC' }}>
+                  {user.name}
+                </span>
+                <span style={{
+                  fontSize: '0.7rem',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  fontWeight: 600,
+                  background: role === 'ADMIN' ? 'rgba(52, 211, 153, 0.2)' : role === 'ASHATEACHER' ? 'rgba(94, 234, 212, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                  color: role === 'ADMIN' ? '#34D399' : role === 'ASHATEACHER' ? '#5EEAD4' : '#F59E0B'
+                }}>
+                  {role || 'GUEST'}
+                </span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                title="Sign Out"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: '#F87171',
+                  borderRadius: '6px',
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google sign-in was unsuccesful or blocked')}
+                theme="filled_black"
+                shape="pill"
+                size="small"
+                text="signin_with"
+              />
+              <button
+                onClick={() => handleQuickLogin('ADMIN')}
+                title="Quick sign-in as Admin (Arjoe Basak)"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  color: '#93C5FD',
+                  borderRadius: '16px',
+                  padding: '4px 10px',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 500
+                }}
+              >
+                Demo Admin
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -216,25 +495,46 @@ export default function InsightsPage() {
         display: 'flex',
         flexDirection: 'column',
         gap: '24px',
-        flex: 1
+        flex: 1,
+        boxSizing: 'border-box'
       }}>
         {/* Search & Prompt Box */}
         <section style={{
           background: 'var(--bg-2, #1A2540)',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '16px',
-          padding: '24px',
+          padding: '28px 24px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px'
+          alignItems: 'center',
+          gap: '18px',
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#5EEAD4', fontSize: '0.9rem', fontWeight: 600 }}>
-            <Lightbulb size={18} />
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            color: '#5EEAD4',
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            textAlign: 'center',
+            width: '100%'
+          }}>
+            <Lightbulb size={20} />
             <span>Ask any question to dynamically synthesize graphs & analytics</span>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '12px' }}>
+          <form onSubmit={handleSubmit} style={{
+            display: 'flex',
+            gap: '12px',
+            width: '100%',
+            maxWidth: '920px',
+            margin: '0 auto',
+            boxSizing: 'border-box'
+          }}>
             <input
               type="text"
               value={prompt}
@@ -242,13 +542,15 @@ export default function InsightsPage() {
               placeholder="e.g. Compare Maths vs English score averages in 2020 by class..."
               style={{
                 flex: 1,
+                minWidth: 0,
                 background: 'rgba(15, 23, 41, 0.8)',
                 border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '10px',
-                padding: '14px 18px',
+                borderRadius: '12px',
+                padding: '14px 20px',
                 color: '#F8FAFC',
                 fontSize: '0.95rem',
                 outline: 'none',
+                boxSizing: 'border-box',
                 transition: 'border 0.2s'
               }}
               onFocus={(e) => e.target.style.borderColor = '#5EEAD4'}
@@ -260,15 +562,17 @@ export default function InsightsPage() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '8px',
                 background: loading ? '#475569' : 'linear-gradient(135deg, #5EEAD4, #2DD4BF)',
                 color: '#0F1729',
                 border: 'none',
-                borderRadius: '10px',
-                padding: '0 24px',
+                borderRadius: '12px',
+                padding: '0 26px',
                 fontWeight: 600,
                 fontSize: '0.95rem',
                 cursor: loading || !prompt.trim() ? 'not-allowed' : 'pointer',
+                flexShrink: 0,
                 transition: 'transform 0.1s, opacity 0.2s'
               }}
             >
@@ -278,7 +582,15 @@ export default function InsightsPage() {
           </form>
 
           {/* Quick Suggestions */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            maxWidth: '920px'
+          }}>
             <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 500 }}>Try:</span>
             {EXAMPLE_QUERIES.map((q, i) => (
               <button
@@ -486,7 +798,7 @@ export default function InsightsPage() {
         color: '#64748B',
         fontSize: '0.78rem'
       }}>
-        Asha Kanini Insights • Powered by Llama 3.3 70B & PostgreSQL
+        Asha Kanini Insights • Powered by Google Gemini & PostgreSQL
       </footer>
 
       {/* Inline spin keyframe style */}
