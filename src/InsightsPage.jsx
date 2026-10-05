@@ -14,9 +14,13 @@ import {
   Lightbulb,
   FileText,
   User,
-  LogOut
+  LogOut,
+  WifiOff,
+  AlertTriangle
 } from 'lucide-react';
 import DynamicVisualizer from './components/DynamicVisualizer';
+import OfflineBanner from './components/OfflineBanner';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 
 const API_BASE = (import.meta.env.VITE_API_BASE || `http://${window.location.hostname}:4000`).replace(/\/+$/, '');
 
@@ -35,6 +39,10 @@ export default function InsightsPage() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [showDetailed, setShowDetailed] = useState(true);
+
+  // Multi-tier Network Connectivity Status
+  const { status: networkStatus, effectiveType } = useNetworkStatus();
+  const isChatDisabled = networkStatus === 'OFFLINE' || networkStatus === 'ONLINE_SLOW';
 
   // User & Authentication State
   const [user, setUser] = useState(() => {
@@ -179,6 +187,13 @@ export default function InsightsPage() {
     const q = (queryText || prompt).trim();
     if (!q) return;
 
+    if (isChatDisabled) {
+      setError(networkStatus === 'OFFLINE'
+        ? 'AI Visualizer is disabled in offline mode. Please reconnect to a stable network.'
+        : `AI Visualizer is disabled on slow networks (${effectiveType.toUpperCase()}) to prevent timeouts.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setStatusMsg(`Asha AI (${provider === 'gemini' ? 'Gemini 2.5 Flash' : 'Groq 120B'}) is analyzing query & selecting tools...`);
@@ -299,6 +314,9 @@ export default function InsightsPage() {
       display: 'flex',
       flexDirection: 'column'
     }}>
+      {/* Global Ambient Network Warning Banner */}
+      <OfflineBanner />
+
       {/* Top Navbar */}
       <header style={{
         background: 'rgba(26, 37, 64, 0.8)',
@@ -527,19 +545,60 @@ export default function InsightsPage() {
             <span>Ask any question to dynamically synthesize graphs & analytics</span>
           </div>
 
+          {/* Strict Offline & Slow Network Guard Banner */}
+          {isChatDisabled && (
+            <div style={{
+              width: '100%',
+              maxWidth: '920px',
+              margin: '0 auto',
+              background: networkStatus === 'OFFLINE' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+              border: `1px solid ${networkStatus === 'OFFLINE' ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+              borderRadius: '12px',
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '12px',
+              color: networkStatus === 'OFFLINE' ? '#FCA5A5' : '#FDE68A',
+              fontSize: '0.88rem',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ marginTop: '2px', flexShrink: 0 }}>
+                {networkStatus === 'OFFLINE' ? <WifiOff size={18} /> : <AlertTriangle size={18} />}
+              </div>
+              <div style={{ lineHeight: 1.5 }}>
+                <strong style={{ display: 'block', marginBottom: '2px', color: networkStatus === 'OFFLINE' ? '#F87171' : '#FBBF24' }}>
+                  {networkStatus === 'OFFLINE' ? 'AI Visualizer Unavailable Offline' : `Low-Bandwidth Detected (${effectiveType.toUpperCase()})`}
+                </strong>
+                <span>
+                  {networkStatus === 'OFFLINE'
+                    ? 'Synthesizing charts requires a live internet connection to communicate with Google Gemini and remote databases. Reconnect to resume queries.'
+                    : 'AI query synthesis is paused on slow networks to avoid hangs and timeouts. Learning trails and cached course materials remain accessible.'}
+                </span>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{
             display: 'flex',
             gap: '12px',
             width: '100%',
             maxWidth: '920px',
             margin: '0 auto',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            opacity: isChatDisabled ? 0.65 : 1
           }}>
             <input
               type="text"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g. Compare Maths vs English score averages in 2020 by class..."
+              disabled={isChatDisabled || loading}
+              placeholder={
+                isChatDisabled
+                  ? (networkStatus === 'OFFLINE'
+                      ? 'AI Visualizer disabled while offline — connect to internet to query'
+                      : `AI Visualizer paused on slow connection (${effectiveType.toUpperCase()})`)
+                  : 'e.g. Compare Maths vs English score averages in 2020 by class...'
+              }
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -551,27 +610,32 @@ export default function InsightsPage() {
                 fontSize: '0.95rem',
                 outline: 'none',
                 boxSizing: 'border-box',
-                transition: 'border 0.2s'
+                transition: 'border 0.2s',
+                cursor: isChatDisabled ? 'not-allowed' : 'text'
               }}
-              onFocus={(e) => e.target.style.borderColor = '#5EEAD4'}
-              onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
+              onFocus={(e) => {
+                if (!isChatDisabled) e.target.style.borderColor = '#5EEAD4';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              }}
             />
             <button
               type="submit"
-              disabled={loading || !prompt.trim()}
+              disabled={isChatDisabled || loading || !prompt.trim()}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                background: loading ? '#475569' : 'linear-gradient(135deg, #5EEAD4, #2DD4BF)',
-                color: '#0F1729',
+                background: (isChatDisabled || loading || !prompt.trim()) ? '#475569' : 'linear-gradient(135deg, #5EEAD4, #2DD4BF)',
+                color: (isChatDisabled || loading || !prompt.trim()) ? '#94A3B8' : '#0F1729',
                 border: 'none',
                 borderRadius: '12px',
                 padding: '0 26px',
                 fontWeight: 600,
                 fontSize: '0.95rem',
-                cursor: loading || !prompt.trim() ? 'not-allowed' : 'pointer',
+                cursor: (isChatDisabled || loading || !prompt.trim()) ? 'not-allowed' : 'pointer',
                 flexShrink: 0,
                 transition: 'transform 0.1s, opacity 0.2s'
               }}
@@ -589,14 +653,18 @@ export default function InsightsPage() {
             alignItems: 'center',
             justifyContent: 'center',
             width: '100%',
-            maxWidth: '920px'
+            maxWidth: '920px',
+            opacity: isChatDisabled ? 0.45 : 1,
+            pointerEvents: isChatDisabled ? 'none' : 'auto'
           }}>
             <span style={{ fontSize: '0.78rem', color: '#64748B', fontWeight: 500 }}>Try:</span>
             {EXAMPLE_QUERIES.map((q, i) => (
               <button
                 key={i}
                 type="button"
+                disabled={isChatDisabled}
                 onClick={() => {
+                  if (isChatDisabled) return;
                   setPrompt(q);
                   handleExecuteQuery(q);
                 }}
@@ -607,18 +675,22 @@ export default function InsightsPage() {
                   padding: '5px 12px',
                   color: '#94A3B8',
                   fontSize: '0.8rem',
-                  cursor: 'pointer',
+                  cursor: isChatDisabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(94, 234, 212, 0.08)';
-                  e.target.style.color = '#5EEAD4';
-                  e.target.style.borderColor = 'rgba(94, 234, 212, 0.25)';
+                  if (!isChatDisabled) {
+                    e.target.style.background = 'rgba(94, 234, 212, 0.08)';
+                    e.target.style.color = '#5EEAD4';
+                    e.target.style.borderColor = 'rgba(94, 234, 212, 0.25)';
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.04)';
-                  e.target.style.color = '#94A3B8';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  if (!isChatDisabled) {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.04)';
+                    e.target.style.color = '#94A3B8';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  }
                 }}
               >
                 {q}

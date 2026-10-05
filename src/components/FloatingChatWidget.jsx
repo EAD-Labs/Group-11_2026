@@ -6,8 +6,11 @@ import {
   Maximize2,
   Send,
   BarChart3,
-  Bot
+  Bot,
+  WifiOff,
+  AlertTriangle
 } from 'lucide-react';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 const SUGGESTIONS = [
   "Compare Maths & English in 2020",
@@ -19,8 +22,11 @@ const SUGGESTIONS = [
 export default function FloatingChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const { status, effectiveType } = useNetworkStatus();
+  const isChatDisabled = status === 'OFFLINE' || status === 'ONLINE_SLOW';
 
   const handleOpenVisualizer = (customQuery) => {
+    if (isChatDisabled) return;
     const q = (customQuery || query).trim();
     if (q) {
       window.location.href = `/insights?q=${encodeURIComponent(q)}`;
@@ -109,45 +115,73 @@ export default function FloatingChatWidget() {
 
           {/* Body */}
           <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#CBD5E1', lineHeight: 1.4 }}>
-              Ask questions about student assessments and watch the AI dynamically reorganize graphs and data on the full visual canvas.
-            </p>
+            {/* Offline or Slow Network Warning Box */}
+            {isChatDisabled ? (
+              <div style={{
+                background: status === 'OFFLINE' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                border: `1px solid ${status === 'OFFLINE' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
+                borderRadius: '10px',
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                color: status === 'OFFLINE' ? '#FCA5A5' : '#FCD34D',
+                fontSize: '0.78rem',
+                lineHeight: 1.4
+              }}>
+                {status === 'OFFLINE' ? <WifiOff size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                <div>
+                  <strong>{status === 'OFFLINE' ? 'Offline Mode Active' : `Slow Connection (${effectiveType.toUpperCase()})`}</strong>
+                  <div>
+                    AI Visualizer requires a live, stable internet connection. All downloaded trail paths & course materials remain fully functional.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: '0.82rem', color: '#CBD5E1', lineHeight: 1.4 }}>
+                Ask questions about student assessments and watch the AI dynamically reorganize graphs and data on the full visual canvas.
+              </p>
+            )}
 
             {/* Input field */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
               background: '#0F1729',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              border: `1px solid ${isChatDisabled ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.15)'}`,
               borderRadius: '10px',
               padding: '6px 10px',
-              gap: '6px'
+              gap: '6px',
+              opacity: isChatDisabled ? 0.6 : 1
             }}>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about school scores, trends..."
+                disabled={isChatDisabled}
+                placeholder={isChatDisabled ? "AI Visualizer unavailable offline" : "Ask about school scores, trends..."}
                 style={{
                   flex: 1,
                   background: 'transparent',
                   border: 'none',
-                  color: '#F8FAFC',
+                  color: isChatDisabled ? '#64748B' : '#F8FAFC',
                   fontSize: '0.85rem',
-                  outline: 'none'
+                  outline: 'none',
+                  cursor: isChatDisabled ? 'not-allowed' : 'text'
                 }}
               />
               <button
                 type="button"
                 onClick={() => handleOpenVisualizer()}
+                disabled={isChatDisabled || !query.trim()}
                 style={{
-                  background: '#5EEAD4',
-                  color: '#0F1729',
+                  background: isChatDisabled || !query.trim() ? '#334155' : '#5EEAD4',
+                  color: isChatDisabled || !query.trim() ? '#94A3B8' : '#0F1729',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '6px 10px',
-                  cursor: 'pointer',
+                  cursor: isChatDisabled || !query.trim() ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
@@ -168,23 +202,29 @@ export default function FloatingChatWidget() {
                     key={i}
                     type="button"
                     onClick={() => handleOpenVisualizer(s)}
+                    disabled={isChatDisabled}
                     style={{
                       background: 'rgba(255, 255, 255, 0.04)',
                       border: '1px solid rgba(255, 255, 255, 0.08)',
                       borderRadius: '14px',
                       padding: '4px 10px',
-                      color: '#94A3B8',
+                      color: isChatDisabled ? '#475569' : '#94A3B8',
                       fontSize: '0.75rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s'
+                      cursor: isChatDisabled ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s',
+                      opacity: isChatDisabled ? 0.5 : 1
                     }}
                     onMouseEnter={(e) => {
-                      e.target.style.background = 'rgba(94, 234, 212, 0.1)';
-                      e.target.style.color = '#5EEAD4';
+                      if (!isChatDisabled) {
+                        e.target.style.background = 'rgba(94, 234, 212, 0.1)';
+                        e.target.style.color = '#5EEAD4';
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.background = 'rgba(255, 255, 255, 0.04)';
-                      e.target.style.color = '#94A3B8';
+                      if (!isChatDisabled) {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.04)';
+                        e.target.style.color = '#94A3B8';
+                      }
                     }}
                   >
                     {s}
@@ -197,28 +237,29 @@ export default function FloatingChatWidget() {
             <button
               type="button"
               onClick={() => handleOpenVisualizer()}
+              disabled={isChatDisabled}
               style={{
-                background: 'linear-gradient(135deg, #5EEAD4, #2DD4BF)',
-                color: '#0F1729',
+                background: isChatDisabled ? '#334155' : 'linear-gradient(135deg, #5EEAD4, #2DD4BF)',
+                color: isChatDisabled ? '#94A3B8' : '#0F1729',
                 border: 'none',
                 borderRadius: '10px',
                 padding: '12px',
                 fontWeight: 700,
                 fontSize: '0.85rem',
-                cursor: 'pointer',
+                cursor: isChatDisabled ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 14px rgba(94, 234, 212, 0.25)',
+                boxShadow: isChatDisabled ? 'none' : '0 4px 14px rgba(94, 234, 212, 0.25)',
                 transition: 'transform 0.1s'
               }}
-              onMouseDown={(e) => e.target.style.transform = 'scale(0.98)'}
-              onMouseUp={(e) => e.target.style.transform = 'scale(1)'}
+              onMouseDown={(e) => { if (!isChatDisabled) e.target.style.transform = 'scale(0.98)'; }}
+              onMouseUp={(e) => { if (!isChatDisabled) e.target.style.transform = 'scale(1)'; }}
             >
               <BarChart3 size={16} />
-              <span>Launch Full Visualizer Canvas</span>
-              <ArrowRight size={14} />
+              <span>{isChatDisabled ? 'AI Paused (Offline / Slow)' : 'Launch Full Visualizer Canvas'}</span>
+              {!isChatDisabled && <ArrowRight size={14} />}
             </button>
           </div>
         </div>
@@ -232,21 +273,39 @@ export default function FloatingChatWidget() {
           width: '56px',
           height: '56px',
           borderRadius: '28px',
-          background: 'linear-gradient(135deg, #5EEAD4, #0D9488)',
-          color: '#0F1729',
+          background: isChatDisabled
+            ? 'linear-gradient(135deg, #475569, #334155)'
+            : 'linear-gradient(135deg, #5EEAD4, #0D9488)',
+          color: isChatDisabled ? '#CBD5E1' : '#0F1729',
           border: '2px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 8px 32px rgba(13, 148, 136, 0.4), 0 0 16px rgba(94, 234, 212, 0.3)',
+          boxShadow: isChatDisabled
+            ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+            : '0 8px 32px rgba(13, 148, 136, 0.4), 0 0 16px rgba(94, 234, 212, 0.3)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          position: 'relative',
           transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.06)'}
         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        title="Open Asha AI Visualizer"
+        title={isChatDisabled ? "AI Visualizer is paused (offline/slow connection)" : "Open Asha AI Visualizer"}
       >
-        {isOpen ? <X size={24} /> : <Sparkles size={24} />}
+        {isOpen ? <X size={24} /> : isChatDisabled ? <WifiOff size={22} /> : <Sparkles size={24} />}
+        {/* Offline indicator badge */}
+        {isChatDisabled && (
+          <div style={{
+            position: 'absolute',
+            top: '-2px',
+            right: '-2px',
+            width: '14px',
+            height: '14px',
+            borderRadius: '7px',
+            background: status === 'OFFLINE' ? '#EF4444' : '#F59E0B',
+            border: '2px solid #0F1729'
+          }} />
+        )}
       </button>
 
       <style>{`

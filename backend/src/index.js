@@ -37,7 +37,14 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.json({ ok: true, timestamp: Date.now() });
+});
+app.head("/api/health", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.status(200).end();
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);

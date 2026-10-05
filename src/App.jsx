@@ -5,8 +5,20 @@ import {
   Search, CheckCircle2, Circle, ExternalLink, ChevronLeft,
   GraduationCap, BarChart3, Menu, X, Compass, Star, MapPin,
   User, LogOut, UserPlus, Plus, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff,
+  HardDrive, Download, WifiOff
 } from "lucide-react";
 import { SCHOOLS, STUDENTS_BY_SCHOOL } from "./schoolsData";
+import OfflineBanner from "./components/OfflineBanner";
+import OfflineManagerModal from "./components/OfflineManagerModal";
+import { useNetworkStatus } from "./hooks/useNetworkStatus";
+import {
+  saveClassTrail,
+  getClassTrail,
+  getDownloadedClassesManifest,
+  queueOfflineProgress,
+  getPendingProgress,
+  removeSyncedProgress
+} from "./services/offlineStorage";
 
 // Points at the deployed backend on Render. In production, Vercel injects
 // VITE_API_BASE (set it in Project Settings → Environment Variables).
@@ -153,27 +165,98 @@ function TrailSVG({ topics, onSelect, completedCount }) {
   );
 }
 
-function ClassSubjectPicker({ classes, selectedClass, onSelectClass }) {
+function ClassSubjectPicker({
+  classes,
+  selectedClass,
+  onSelectClass,
+  cachedClasses = [],
+  onOpenOfflineManager,
+  onDownloadCurrentClass,
+  isDownloading
+}) {
+  const isSelectedCached = cachedClasses.includes(String(selectedClass));
+
   return (
     <div className="picker-row">
       <div className="class-pill-group">
         <span className="picker-eyebrow">Class</span>
         <div className="class-pills">
-          {classes.map((c) => (
-            <button
-              key={c}
-              className={"class-pill" + (c === selectedClass ? " class-pill-active" : "")}
-              onClick={() => onSelectClass(c)}
-            >
-              {c}
-            </button>
-          ))}
+          {classes.map((c) => {
+            const isCached = cachedClasses.includes(String(c));
+            return (
+              <button
+                key={c}
+                className={"class-pill" + (c === selectedClass ? " class-pill-active" : "")}
+                onClick={() => onSelectClass(c)}
+                title={isCached ? `Class ${c} is stored offline` : `Class ${c}`}
+                style={{ position: 'relative' }}
+              >
+                {c}
+                {isCached && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '3px',
+                      right: '3px',
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: '#10B981'
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className="picker-chip picker-active">
         <span className="picker-eyebrow">Subject</span>
         <span>Maths</span>
       </div>
+
+      {/* Offline Status / Download Action Pill */}
+      {isSelectedCached ? (
+        <button
+          type="button"
+          onClick={onOpenOfflineManager}
+          className="picker-chip"
+          style={{
+            cursor: 'pointer',
+            borderColor: '#10B981',
+            background: 'rgba(16, 185, 129, 0.08)',
+            color: '#065F46',
+            textAlign: 'left'
+          }}
+          title="Class trail is cached offline. Click to open Offline Manager."
+        >
+          <span className="picker-eyebrow" style={{ color: '#059669' }}>Offline Access</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, fontSize: '13px' }}>
+            <CheckCircle2 size={13} color="#10B981" /> Class {selectedClass} Cached
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onDownloadCurrentClass}
+          disabled={isDownloading}
+          className="picker-chip"
+          style={{
+            cursor: isDownloading ? 'not-allowed' : 'pointer',
+            borderColor: '#F2A93B',
+            background: 'rgba(242, 169, 59, 0.1)',
+            color: '#92400E',
+            textAlign: 'left'
+          }}
+          title={`Download Class ${selectedClass} curriculum trail for offline teaching`}
+        >
+          <span className="picker-eyebrow" style={{ color: '#D97706' }}>Offline Cache</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, fontSize: '13px' }}>
+            <Download size={13} /> {isDownloading ? 'Saving...' : `Download Class ${selectedClass}`}
+          </span>
+        </button>
+      )}
+
       <div className="picker-chip picker-disabled" title="Coming soon">
         <span className="picker-eyebrow">Medium</span>
         <span>English</span>
@@ -185,7 +268,7 @@ function ClassSubjectPicker({ classes, selectedClass, onSelectClass }) {
   );
 }
 
-function TopicView({ cls, term, topic, completed, toggleComplete, markOpened, onBack }) {
+function TopicView({ cls, term, topic, completed, toggleComplete, markOpened, onBack, isClassCached }) {
   const doneCount = topic.items.filter((it) =>
     completed.has(`${cls}-${term}-${topic.topic}-${it.title}`)
   ).length;
@@ -218,6 +301,8 @@ function TopicView({ cls, term, topic, completed, toggleComplete, markOpened, on
           const Icon = getIcon(item.type);
           const key = `${cls}-${term}-${topic.topic}-${item.title}`;
           const done = completed.has(key);
+          const isStream = item.type === 'Video' || item.type === 'Classroom Presentation';
+
           return (
             <div className="step-row" key={key}>
               <div className="step-line-wrap">
@@ -227,11 +312,47 @@ function TopicView({ cls, term, topic, completed, toggleComplete, markOpened, on
                 {i < topic.items.length - 1 && <div className="step-connector" />}
               </div>
               <div className="step-card">
-                <div className="step-card-top">
-                  <span className="type-chip">
-                    <Icon size={14} /> {item.type}
-                  </span>
-                  <span className="source-chip">{item.package}</span>
+                <div className="step-card-top" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="type-chip">
+                      <Icon size={14} /> {item.type}
+                    </span>
+                    <span className="source-chip">{item.package}</span>
+                  </div>
+
+                  {/* Offline readiness badge */}
+                  {isClassCached ? (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: isStream ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                        color: isStream ? '#B45309' : '#065F46',
+                        border: `1px solid ${isStream ? 'rgba(245, 158, 11, 0.25)' : 'rgba(16, 185, 129, 0.25)'}`,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title={isStream ? 'Video streaming requires internet' : 'Available offline on this device'}
+                    >
+                      {isStream ? '⚡ Stream' : '✓ Offline Ready'}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: 'rgba(100, 116, 139, 0.1)',
+                        color: '#64748B'
+                      }}
+                    >
+                      Online Only
+                    </span>
+                  )}
                 </div>
                 <h3>{item.title}</h3>
                 {item.desc && <p>{item.desc}</p>}
@@ -681,6 +802,14 @@ export default function App() {
   const [completed, setCompleted] = useState(new Set());
   const [navOpen, setNavOpen] = useState(false);
 
+  // --- Multi-tier Network Detection ---
+  const { status: networkStatus } = useNetworkStatus();
+
+  // --- Offline Storage & Download Management State ---
+  const [offlineModalOpen, setOfflineModalOpen] = useState(false);
+  const [cachedClasses, setCachedClasses] = useState([]);
+  const [isDownloadingClass, setIsDownloadingClass] = useState(false);
+
   // --- Auth + student + progress state (talks to the backend API) ---
   const [teacher, setTeacher] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
@@ -690,6 +819,84 @@ export default function App() {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [syncError, setSyncError] = useState("");
+
+  // Load downloaded classes manifest from IndexedDB on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const manifest = await getDownloadedClassesManifest();
+        if (manifest && manifest.length > 0) {
+          setCachedClasses(manifest.map((item) => String(item.classId)));
+        } else if (DATA && DATA.classes && DATA.classes['3']) {
+          // Pre-buffer Class 3 into IndexedDB on first load for zero-config offline teaching
+          await saveClassTrail('3', DATA.classes['3']);
+          setCachedClasses(['3']);
+        }
+      } catch (e) {
+        console.warn('Could not read offline manifest:', e);
+      }
+    })();
+  }, []);
+
+  // Download the currently selected class for offline use
+  async function handleDownloadCurrentClass() {
+    if (!DATA.classes[selectedClass]) return;
+    setIsDownloadingClass(true);
+    try {
+      await saveClassTrail(selectedClass, DATA.classes[selectedClass]);
+      setCachedClasses((prev) => Array.from(new Set([...prev, String(selectedClass)])));
+      setSyncError(`✓ Class ${selectedClass} curriculum trail saved for offline use!`);
+      setTimeout(() => setSyncError(''), 4000);
+    } catch (e) {
+      setSyncError(`Failed to save Class ${selectedClass}: ${e.message}`);
+    } finally {
+      setIsDownloadingClass(false);
+    }
+  }
+
+  // Background Outbox Sync Reconciler
+  // When online connectivity resumes, flush queued progress mutations to backend
+  useEffect(() => {
+    if ((networkStatus === 'ONLINE_HIGH_SPEED' || networkStatus === 'ONLINE_SLOW') && accessToken) {
+      (async () => {
+        try {
+          const pending = await getPendingProgress();
+          if (pending && pending.length > 0) {
+            console.log(`[Offline Sync] Reconciling ${pending.length} pending mutations...`);
+            const syncedIds = [];
+            for (const item of pending) {
+              try {
+                if (item.action === 'DELETE') {
+                  await apiFetch(
+                    `/api/students/${item.studentId}/progress/${encodeURIComponent(item.payload.resourceKey)}?subject=Maths`,
+                    { method: 'DELETE', token: accessToken }
+                  );
+                } else {
+                  await apiFetch(`/api/students/${item.studentId}/progress`, {
+                    method: 'POST',
+                    token: accessToken,
+                    body: item.payload
+                  });
+                }
+                syncedIds.push(item.id);
+              } catch (err) {
+                console.error('[Offline Sync] Failed mutation replay:', err);
+                if (!navigator.onLine || err.message.includes('reach the server')) break;
+              }
+            }
+
+            if (syncedIds.length > 0) {
+              await removeSyncedProgress(syncedIds);
+              setSyncError(`✓ Synced ${syncedIds.length} offline progress updates with server!`);
+              setTimeout(() => setSyncError(''), 4500);
+            }
+          }
+        } catch (err) {
+          console.error('[Offline Sync] Error checking pending progress:', err);
+        }
+      })();
+    }
+  }, [networkStatus, accessToken]);
 
   // NOTE: students are intentionally NOT fetched from the backend on
   // login/register. Each session starts with an empty roster in the UI —
@@ -842,8 +1049,7 @@ export default function App() {
   const totalDone = completed.size;
 
   // Marks/unmarks a resource complete. If logged in with a student selected,
-  // this syncs to the backend (optimistic update, reverts on failure). If
-  // not logged in, it just tracks progress locally for this session.
+  // this syncs to the backend (or queues locally in IndexedDB if offline).
   async function toggleComplete({ key, cls, term: t, topic }) {
     const isDone = completed.has(key);
     setCompleted((prev) => {
@@ -853,6 +1059,17 @@ export default function App() {
     });
 
     if (!teacher || !selectedStudentId) return;
+
+    // Fast-path: If offline, queue directly into IndexedDB without network timeout
+    if (networkStatus === 'OFFLINE') {
+      await queueOfflineProgress({
+        studentId: selectedStudentId,
+        action: isDone ? 'DELETE' : 'POST',
+        payload: { subject: "Maths", classLevel: Number(cls), term: t, topic, resourceKey: key }
+      });
+      setSyncError('Offline: Activity updated locally. Will auto-sync when online.');
+      return;
+    }
 
     try {
       if (isDone) {
@@ -868,7 +1085,18 @@ export default function App() {
         });
       }
     } catch (err) {
-      // revert optimistic update
+      // Check if failure is due to offline/drop in connectivity
+      if (!navigator.onLine || err.message.includes('reach the server') || err.message.includes('fetch')) {
+        await queueOfflineProgress({
+          studentId: selectedStudentId,
+          action: isDone ? 'DELETE' : 'POST',
+          payload: { subject: "Maths", classLevel: Number(cls), term: t, topic, resourceKey: key }
+        });
+        setSyncError('Connection drop: Progress saved locally and queued for auto-sync.');
+        return;
+      }
+
+      // Revert optimistic update only for real server/validation errors
       setCompleted((prev) => {
         const next = new Set(prev);
         isDone ? next.add(key) : next.delete(key);
@@ -880,14 +1108,23 @@ export default function App() {
 
   // Fired automatically the moment someone clicks "Open" on a resource.
   // Idempotent — clicking Open again on an already-marked resource does
-  // nothing (unlike toggleComplete, this never un-marks). The manual
-  // "Mark done" button still exists for correcting mistakes.
+  // nothing (unlike toggleComplete, this never un-marks).
   async function markOpened({ key, cls, term: t, topic }) {
     if (completed.has(key)) return;
 
     setCompleted((prev) => new Set(prev).add(key));
 
     if (!teacher || !selectedStudentId) return;
+
+    if (networkStatus === 'OFFLINE') {
+      await queueOfflineProgress({
+        studentId: selectedStudentId,
+        action: 'POST',
+        payload: { subject: "Maths", classLevel: Number(cls), term: t, topic, resourceKey: key }
+      });
+      setSyncError('Offline: Activity recorded locally. Will sync when reconnected.');
+      return;
+    }
 
     try {
       await apiFetch(`/api/students/${selectedStudentId}/progress`, {
@@ -896,6 +1133,16 @@ export default function App() {
         body: { subject: "Maths", classLevel: Number(cls), term: t, topic, resourceKey: key },
       });
     } catch (err) {
+      if (!navigator.onLine || err.message.includes('reach the server') || err.message.includes('fetch')) {
+        await queueOfflineProgress({
+          studentId: selectedStudentId,
+          action: 'POST',
+          payload: { subject: "Maths", classLevel: Number(cls), term: t, topic, resourceKey: key }
+        });
+        setSyncError('Connection drop: Activity saved locally and will auto-sync.');
+        return;
+      }
+
       setCompleted((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -1556,6 +1803,9 @@ export default function App() {
         }
       `}</style>
 
+      {/* Global Ambient Network Warning Banner */}
+      <OfflineBanner onOpenOfflineManager={() => setOfflineModalOpen(true)} />
+
       <header className="header">
         <div className="brand" onClick={goHome}>
           <div className="brand-badge">க</div>
@@ -1581,6 +1831,13 @@ export default function App() {
             onClick={() => { setView("search"); setNavOpen(false); }}
           >
             <Search size={16} /> Search
+          </button>
+          <button
+            className="nav-btn"
+            onClick={() => { setOfflineModalOpen(true); setNavOpen(false); }}
+            title="Manage offline curriculum and cached classes"
+          >
+            <HardDrive size={16} /> Offline {cachedClasses.length > 0 ? `(${cachedClasses.length})` : ''}
           </button>
           <a href="/analytics" className="nav-btn">
             <BarChart3 size={16} /> Analytics
@@ -1624,6 +1881,10 @@ export default function App() {
                 classes={classList}
                 selectedClass={selectedClass}
                 onSelectClass={selectClass}
+                cachedClasses={cachedClasses}
+                onOpenOfflineManager={() => setOfflineModalOpen(true)}
+                onDownloadCurrentClass={handleDownloadCurrentClass}
+                isDownloading={isDownloadingClass}
               />
             </div>
 
@@ -1658,6 +1919,7 @@ export default function App() {
             toggleComplete={toggleComplete}
             markOpened={markOpened}
             onBack={goHome}
+            isClassCached={cachedClasses.includes(String(selectedClass))}
           />
         )}
 
@@ -1682,6 +1944,16 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Offline & Downloads Modal */}
+      <OfflineManagerModal
+        isOpen={offlineModalOpen}
+        onClose={() => setOfflineModalOpen(false)}
+        classesData={DATA.classes}
+        onManifestChange={(manifest) => {
+          setCachedClasses(manifest.map((item) => String(item.classId)));
+        }}
+      />
     </div>
   );
 }
