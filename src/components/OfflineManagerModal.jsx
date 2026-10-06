@@ -33,7 +33,9 @@ export default function OfflineManagerModal({ isOpen, onClose, classesData, onMa
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const classList = ['1', '2', '3', '4', '5'];
+  const classList = classesData && Object.keys(classesData).length > 0
+    ? Object.keys(classesData).sort((a, b) => Number(a) - Number(b))
+    : ['1', '2', '3', '4', '5', '6', '7', '8'];
 
   const refreshData = async () => {
     try {

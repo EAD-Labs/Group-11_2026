@@ -32,3 +32,8 @@ backend/migrations/002_legacy_client_data.sql
 .env.*
 backend/.env
 backend/.env.*
+
+# Sensitive contracts and project specifications
+Asha_Insights_HLD_Contract_final.txt
+*Contract*
+*contract*

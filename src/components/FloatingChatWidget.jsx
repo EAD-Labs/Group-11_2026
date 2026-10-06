@@ -11,6 +11,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { canAccessRoute } from '../utils/rbacGuard';
 
 const SUGGESTIONS = [
   "Compare Maths & English in 2020",
@@ -28,11 +29,20 @@ export default function FloatingChatWidget() {
   const handleOpenVisualizer = (customQuery) => {
     if (isChatDisabled) return;
     const q = (customQuery || query).trim();
-    if (q) {
-      window.location.href = `/insights?q=${encodeURIComponent(q)}`;
-    } else {
-      window.location.href = `/insights`;
+    const targetUrl = q ? `/insights?q=${encodeURIComponent(q)}` : `/insights`;
+
+    // Strict Pre-Navigation RBAC Check
+    const access = canAccessRoute('/insights');
+    if (!access.allowed) {
+      alert(
+        access.reason === 'AUTH_REQUIRED'
+          ? 'Authentication Required: Please sign in as an Asha Teacher or Admin to access the AI Visualizer.'
+          : `Access Restricted: Requires ${access.requiredRole} privileges.`
+      );
+      return;
     }
+
+    window.location.href = targetUrl;
   };
 
   const handleKeyDown = (e) => {

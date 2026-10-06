@@ -10,6 +10,7 @@ const studentRoutes = require("./routes/students");
 const progressRoutes = require("./routes/progress");
 const analyticsRoutes = require("./routes/analytics");
 const chatRoutes = require("./routes/chat");
+const contentRoutes = require("./routes/content");
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/students", progressRoutes);
 app.use("/api/analytics/chat", chatRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/content", contentRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
