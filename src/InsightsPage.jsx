@@ -196,7 +196,7 @@ export default function InsightsPage() {
 
     setLoading(true);
     setError(null);
-    setStatusMsg(`Asha AI (${provider === 'gemini' ? 'Gemini 2.5 Flash' : 'Groq 120B'}) is analyzing query & selecting tools...`);
+    setStatusMsg(`Asha AI (${provider === 'gemini' ? 'Gemini 3.8 Flash' : 'Groq 120B'}) is analyzing query & selecting tools...`);
 
     try {
       let token = localStorage.getItem('kp_token');

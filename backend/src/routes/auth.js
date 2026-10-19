@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const pool = require("../db/pool");
 const { signAccessToken } = require("../middleware/auth");
-const { SCHOOLS } = require("../data/schools");
+const { SCHOOLS, STUDENTS_BY_SCHOOL } = require("../data/schools");
 
 const router = express.Router();
 
@@ -320,6 +320,48 @@ router.post("/guest-token", (req, res) => {
     role: "GUEST",
     isMasked: true
   });
+});
+
+// GET /api/auth/schools - Returns live school list and per-school student directory from Neon DB
+router.get("/schools", async (req, res) => {
+  try {
+    const dbRes = await pool.query(`
+      SELECT DISTINCT t.school_name, s.name as student_name, s.class_level
+      FROM teachers t
+      LEFT JOIN students s ON s.teacher_id = t.id
+      WHERE t.school_name IS NOT NULL
+      ORDER BY t.school_name, s.name
+    `);
+
+    const mergedRoster = {};
+    for (const [sch, list] of Object.entries(STUDENTS_BY_SCHOOL)) {
+      mergedRoster[sch] = [...list];
+    }
+
+    for (const r of dbRes.rows) {
+      const sch = r.school_name;
+      if (!mergedRoster[sch]) mergedRoster[sch] = [];
+      if (r.student_name && !mergedRoster[sch].some(st => st.name === r.student_name)) {
+        mergedRoster[sch].push({
+          name: r.student_name,
+          classLevel: parseInt(r.class_level || 3, 10)
+        });
+      }
+    }
+
+    res.json({
+      live: true,
+      schools: Object.keys(mergedRoster).sort(),
+      studentsBySchool: mergedRoster
+    });
+  } catch (err) {
+    console.warn("Could not load live schools from DB, using seed:", err.message);
+    res.json({
+      live: false,
+      schools: SCHOOLS,
+      studentsBySchool: STUDENTS_BY_SCHOOL
+    });
+  }
 });
 
 module.exports = router;

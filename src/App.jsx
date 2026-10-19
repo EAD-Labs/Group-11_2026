@@ -563,6 +563,8 @@ function AccountPanel({
   onRemoveStudent,
   authLoading,
   authError,
+  schoolsList = SCHOOLS,
+  studentsBySchool = STUDENTS_BY_SCHOOL,
 }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({ name: "", email: "", password: "", schoolName: "" });
@@ -573,7 +575,7 @@ function AccountPanel({
   // Students already on this teacher's roster, so they can't be picked again
   // from the dropdown below.
   const takenNames = new Set(students.map((s) => s.name));
-  const schoolRoster = STUDENTS_BY_SCHOOL[teacher?.school_name] || [];
+  const schoolRoster = studentsBySchool[teacher?.school_name] || [];
   const availableStudents = schoolRoster.filter((s) => !takenNames.has(s.name));
 
   function submitAuth(e) {
@@ -672,7 +674,7 @@ function AccountPanel({
                       <option value="" disabled>
                         Select your school
                       </option>
-                      {SCHOOLS.map((s) => (
+                      {schoolsList.map((s) => (
                         <option key={s} value={s}>
                           {s}
                         </option>
@@ -858,25 +860,39 @@ export default function App({ initialAuthNotice }) {
   const [cachedClasses, setCachedClasses] = useState([]);
   const [isDownloadingClass, setIsDownloadingClass] = useState(false);
 
-  // --- Dynamic Curriculum Tree (with local bundled fallback) ---
+  // --- Dynamic Curriculum Tree & Schools Directory (with local bundled fallback) ---
   const [curriculumData, setCurriculumData] = useState(BUNDLED_CURRICULUM);
+  const [schoolsList, setSchoolsList] = useState(SCHOOLS);
+  const [studentsBySchool, setStudentsBySchool] = useState(STUDENTS_BY_SCHOOL);
 
   useEffect(() => {
     let isMounted = true;
-    async function fetchDirectory() {
+    async function fetchDirectoryAndSchools() {
       try {
-        const res = await fetch("/api/content/directory");
-        if (res.ok) {
-          const liveData = await res.json();
+        const [dirRes, schRes] = await Promise.allSettled([
+          fetch(`${API_BASE}/api/content/directory`),
+          fetch(`${API_BASE}/api/auth/schools`)
+        ]);
+        if (dirRes.status === "fulfilled" && dirRes.value.ok) {
+          const liveData = await dirRes.value.json();
           if (isMounted && liveData && liveData.classes) {
             setCurriculumData(liveData);
+          }
+        }
+        if (schRes.status === "fulfilled" && schRes.value.ok) {
+          const schData = await schRes.value.json();
+          if (isMounted && schData && schData.schools) {
+            setSchoolsList(schData.schools);
+            if (schData.studentsBySchool) {
+              setStudentsBySchool(schData.studentsBySchool);
+            }
           }
         }
       } catch (err) {
         console.info("[Curriculum] Using bundled offline curriculum:", err.message);
       }
     }
-    fetchDirectory();
+    fetchDirectoryAndSchools();
     return () => {
       isMounted = false;
     };
@@ -1110,6 +1126,36 @@ export default function App({ initialAuthNotice }) {
         .catch(() => {});
     }
   }, []);
+
+  // Load teacher's saved students from Neon DB whenever authenticated
+  useEffect(() => {
+    if (!teacher || !accessToken) return;
+    let cancelled = false;
+    setStudentsLoading(true);
+    apiFetch("/api/students", { token: accessToken })
+      .then((data) => {
+        if (!cancelled && data && Array.isArray(data.students)) {
+          // Deduplicate by name so the active session roster stays clean
+          const seen = new Set();
+          const unique = data.students.filter((s) => {
+            if (seen.has(s.name)) return false;
+            seen.add(s.name);
+            return true;
+          });
+          setStudents(unique);
+          if (unique.length > 0 && !selectedStudentId) {
+            setSelectedStudentId(unique[0].id);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setStudentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teacher, accessToken]);
 
   async function handleLogout() {
     try {
@@ -2109,6 +2155,8 @@ export default function App({ initialAuthNotice }) {
             onRemoveStudent={handleRemoveStudent}
             authLoading={authLoading}
             authError={authError}
+            schoolsList={schoolsList}
+            studentsBySchool={studentsBySchool}
           />
         )}
       </main>

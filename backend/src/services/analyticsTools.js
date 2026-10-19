@@ -481,14 +481,15 @@ async function getParentEducationImpact(relation, year, scope) {
     JOIN "assessmentpaper" ap ON arg."AssessmentPaperID" = ap."AssessmentPaperID"
     JOIN "studentdetails" sd ON sc."SchoolStudentID" = sd."SchoolStudentID"
     LEFT JOIN "educationlevel" el ON sd.${parentCol} = el."EducationLevelID"
-    WHERE arg."AcademicYear" = $1 
+    WHERE ($1::int IS NULL OR arg."AcademicYear" = $1) 
       AND ap."MaxMarks" > 0 
       AND sc."Marks" IS NOT NULL
+      AND el."Detail" IS NOT NULL
       ${sc.clause}
-    GROUP BY el."Detail"
-    ORDER BY avg_percentage DESC
+    GROUP BY el."Detail", el."EducationLevelID"
+    ORDER BY el."EducationLevelID" ASC
   `;
-  const { rows } = await pool.query(query, [year, ...sc.params]);
+  const { rows } = await pool.query(query, [year || null, ...sc.params]);
   return rows.map(r => ({
     relation: relation,
     education_level: r.education_level,
@@ -505,8 +506,8 @@ async function getHomeworkImpact(year, subject, scope) {
   const query = `
     SELECT 
       CASE 
-        WHEN sd."RegularHomework" = 'Y' THEN 'Regular Homework' 
-        WHEN sd."RegularHomework" = 'N' THEN 'Irregular Homework' 
+        WHEN TRIM(sd."RegularHomework") = 'Y' THEN 'Yes' 
+        WHEN TRIM(sd."RegularHomework") = 'N' THEN 'No' 
         ELSE 'Not Recorded' 
       END as homework_status,
       ROUND(AVG(sc."Marks" / ap."MaxMarks" * 100)::numeric, 1) as avg_percentage,
@@ -515,12 +516,13 @@ async function getHomeworkImpact(year, subject, scope) {
     JOIN "assessmentresultgroup" arg ON sc."AssessmentResultID" = arg."AssessmentResultID"
     JOIN "assessmentpaper" ap ON arg."AssessmentPaperID" = ap."AssessmentPaperID"
     JOIN "studentdetails" sd ON sc."SchoolStudentID" = sd."SchoolStudentID"
-    WHERE arg."AcademicYear" = $1 
-      AND ap."Subject" = $2 
+    WHERE ($1::int IS NULL OR arg."AcademicYear" = $1)
+      AND ($2::text IS NULL OR ap."Subject" = $2)
       AND ap."MaxMarks" > 0 
       AND sc."Marks" IS NOT NULL
+      AND TRIM(sd."RegularHomework") IN ('Y', 'N')
       ${sc.clause}
-    GROUP BY sd."RegularHomework"
+    GROUP BY homework_status
     ORDER BY avg_percentage DESC
   `;
   const { rows } = await pool.query(query, [year, subject, ...sc.params]);
