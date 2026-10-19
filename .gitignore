@@ -37,3 +37,8 @@ backend/.env.*
 Asha_Insights_HLD_Contract_final.txt
 *Contract*
 *contract*
+
+# Presentation, poster, and aesthetic assets
+screenshots/
+poster.html
+*.pdf

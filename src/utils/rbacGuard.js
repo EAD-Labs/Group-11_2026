@@ -72,7 +72,11 @@ export function canAccessRoute(targetPath) {
   }
 
   // 2. If authenticated, check role hierarchy
-  const userRole = (user?.role || (token ? ROLES.ASHATEACHER : ROLES.GUEST)).toUpperCase();
+  // Note: If the user signed in via Google OAuth or email/password (not anonymous guest_session),
+  // ensure they have at least ASHATEACHER access even if an older localStorage entry had role='GUEST'.
+  const isRealAuthenticatedUser = token && (!user || (user.email && user.email !== "guest@asha.org"));
+  const rawRole = (user?.role || (token ? ROLES.ASHATEACHER : ROLES.GUEST)).toUpperCase();
+  const userRole = (rawRole === ROLES.GUEST && isRealAuthenticatedUser) ? ROLES.ASHATEACHER : rawRole;
   const userLevel = ROLE_HIERARCHY[userRole] || 1;
   const requiredLevel = ROLE_HIERARCHY[rule.minRole] || 1;
 

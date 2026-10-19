@@ -2057,6 +2057,19 @@ export default function App({ initialAuthNotice }) {
             <BarChart3 size={16} /> Analytics
           </button>
           <button
+            type="button"
+            className="nav-btn"
+            onClick={() => {
+              navigateWithRBAC("/insights", (denied) => {
+                setSyncError(`Access Denied: ${denied.reason === "AUTH_REQUIRED" ? "Please sign in via Account to open AI Visualizer" : "Requires higher privileges"}`);
+                if (denied.reason === "AUTH_REQUIRED") openAccount();
+              });
+              setNavOpen(false);
+            }}
+          >
+            <Sparkles size={16} /> AI Visualizer
+          </button>
+          <button
             className={"nav-btn" + (view === "account" ? " nav-btn-active" : "")}
             onClick={openAccount}
           >

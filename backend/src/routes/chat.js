@@ -576,10 +576,10 @@ async function runGeminiChat({ prompt, history = [], userScope, apiKey, requeste
     requestedModel,
     process.env.GEMINI_MODEL,
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
     "gemini-3.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash"
+    "gemini-flash-lite-latest",
+    "gemini-3.7-flash",
+    "gemini-flash-latest"
   ].filter(Boolean);
   const uniqueModels = [...new Set(modelCandidates)];
 
@@ -607,33 +607,46 @@ async function runGeminiChat({ prompt, history = [], userScope, apiKey, requeste
   const MAX_CONSECUTIVE_FAILURES = 3;
   let consecutiveFailures = 0;
 
-  async function generateWithFallback(payloadContents, cfg) {
+  async function generateWithFallback(payloadContents, cfg, timeoutMs = 15000) {
     let lastErr = null;
     const candidates = [activeModel, ...uniqueModels.filter(m => m !== activeModel)];
-    for (const m of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const m = candidates[i];
+      const nextModel = candidates[i + 1] || "Groq fallback";
+      const t0 = Date.now();
       try {
-        const resp = await ai.models.generateContent({
-          model: m,
-          contents: payloadContents,
-          config: cfg
-        });
+        console.log(`[Gemini] Requesting model '${m}' (turn ${turns + 1}, timeout ${timeoutMs}ms)...`);
+        const resp = await Promise.race([
+          ai.models.generateContent({
+            model: m,
+            contents: payloadContents,
+            config: cfg
+          }),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`High traffic / queue timeout after ${timeoutMs}ms`)),
+              timeoutMs
+            )
+          )
+        ]);
+        console.log(`[Gemini] Model '${m}' responded in ${Date.now() - t0}ms`);
         activeModel = m;
         return resp;
       } catch (err) {
         lastErr = err;
-        console.warn(`Gemini model '${m}' failed (${err.message}). Trying next candidate...`);
+        console.warn(`⚠️ [Gemini] Model '${m}' failed after ${Date.now() - t0}ms (${err.message}). Pivoting to '${nextModel}'...`);
       }
     }
     throw lastErr;
   }
 
-  // Initial call with tools
+  // Initial call with tools (fast 3.5s timeout so congested preview models pivot immediately)
   let response = await generateWithFallback(contents, {
     systemInstruction: SYSTEM_PROMPT,
     tools: geminiTools,
     temperature: 0.2,
     maxOutputTokens: 2500
-  });
+  }, 3500);
 
   while (response.functionCalls && response.functionCalls.length > 0 && turns < MAX_SAFETY_TURNS) {
     turns++;
@@ -687,18 +700,37 @@ async function runGeminiChat({ prompt, history = [], userScope, apiKey, requeste
         });
       } else {
         try {
-          const rawResult = await executeTool(functionName, functionArgs, userScope);
+          const dbStart = Date.now();
+          console.log(`[Neon DB] Executing tool '${functionName}' with args ${JSON.stringify(functionArgs)}...`);
+          let rawResult = await executeTool(functionName, functionArgs, userScope);
+
+          // If user asked for a recent year (e.g. 2023-2026) where assessment rows are empty,
+          // automatically fall back to 2020 (most complete assessment year in Neon DB)
+          let fallbackYearUsed = null;
+          if (Array.isArray(rawResult) && rawResult.length === 0 && functionArgs.year && Number(functionArgs.year) > 2020) {
+            console.log(`[Neon DB] 0 rows for year ${functionArgs.year} in '${functionName}'; auto-falling back to 2020...`);
+            rawResult = await executeTool(functionName, { ...functionArgs, year: 2020 }, userScope);
+            if (Array.isArray(rawResult) && rawResult.length > 0) {
+              fallbackYearUsed = 2020;
+            }
+          }
+
           turnHadSuccess = true;
+          const recordCount = Array.isArray(rawResult) ? rawResult.length : 1;
+          console.log(`[Neon DB] Tool '${functionName}' returned ${recordCount} records in ${Date.now() - dbStart}ms`);
 
           if (Array.isArray(rawResult)) {
             if (rawResult.length === 0) {
               toolResult = {
                 status: "empty",
                 count: 0,
-                message: `Query executed successfully but returned 0 records for ${JSON.stringify(functionArgs)}. Verify specified filters.`
+                message: `Query executed successfully but returned 0 records for ${JSON.stringify(functionArgs)}. Note: Written assessments in Neon DB are primarily recorded for years 2018, 2019, 2020, and 2022 across Classes 2-5.`
               };
             } else {
-              toolResult = rawResult.length > 30 ? rawResult.slice(0, 30) : rawResult;
+              const sliced = rawResult.length > 30 ? rawResult.slice(0, 30) : rawResult;
+              toolResult = fallbackYearUsed
+                ? { note: `No records exist for ${functionArgs.year}; showing latest complete assessment cycle (${fallbackYearUsed}).`, data: sliced }
+                : sliced;
             }
           } else {
             toolResult = rawResult;
@@ -706,12 +738,13 @@ async function runGeminiChat({ prompt, history = [], userScope, apiKey, requeste
 
           toolsExecuted.push({
             tool: functionName,
-            args: functionArgs,
+            args: fallbackYearUsed ? { ...functionArgs, year: fallbackYearUsed } : functionArgs,
             status: "success",
-            recordCount: Array.isArray(rawResult) ? rawResult.length : 1
+            recordCount
           });
         } catch (err) {
           turnHadFailure = true;
+          console.warn(`[Neon DB] Tool '${functionName}' error: ${err.message}`);
           const hint = getToolCallHint(functionName, functionArgs, err.message);
           toolResult = { status: "error", error: err.message, hint };
           toolsExecuted.push({
@@ -1138,6 +1171,7 @@ async function runGroqChat({ prompt, history = [], userScope, apiKey, requestedM
 // Unified POST /api/analytics/chat Route with Multi-Provider Support
 // ---------------------------------------------------------------------------
 router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
+  const reqStart = Date.now();
   try {
     const { prompt, history = [], provider: bodyProvider, model: bodyModel } = req.body;
     const userScope = req.userScope;
@@ -1151,6 +1185,8 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
     }
 
     const sanitizedPrompt = prompt.replace(/\0/g, '').trim();
+    console.log(`\n============================================================`);
+    console.log(`[AI Visualizer] Incoming query from role=${userScope?.role || 'GUEST'}: "${sanitizedPrompt}"`);
 
     // Check available API keys strictly from server environment
     const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -1190,7 +1226,7 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
         });
       } catch (geminiErr) {
         if (hasValidGroq) {
-          console.warn("Gemini provider failed, falling back to Groq:", geminiErr.message);
+          console.warn("⚠️ [AI Visualizer] All Gemini models failed, falling back to Groq:", geminiErr.message);
           executionResult = await runGroqChat({
             prompt: sanitizedPrompt,
             history,
@@ -1213,7 +1249,7 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
         });
       } catch (groqErr) {
         if (hasValidGemini) {
-          console.warn("Groq provider failed, falling back to Gemini:", groqErr.message);
+          console.warn("⚠️ [AI Visualizer] Groq provider failed, falling back to Gemini:", groqErr.message);
           executionResult = await runGeminiChat({
             prompt: sanitizedPrompt,
             history,
@@ -1237,6 +1273,9 @@ router.post('/', rbacMiddleware({ required: true }), async (req, res) => {
       failedCalls: executionResult.toolsExecuted.filter(t => t.status === "failed").length,
       duplicateCalls: executionResult.toolsExecuted.filter(t => t.status === "duplicate").length
     };
+
+    console.log(`✅ [AI Visualizer] Completed in ${Date.now() - reqStart}ms | Provider: ${executionResult.provider} | Model: ${executionResult.modelUsed} | Tools called: ${toolStats.totalCalls} | Widgets: ${secureResult?.ui_layout?.widgets?.length || 0}`);
+    console.log(`============================================================\n`);
 
     return res.json({
       success: true,

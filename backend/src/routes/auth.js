@@ -234,8 +234,9 @@ router.post("/google", async (req, res) => {
     } else if (normalizedEmail.endsWith("@asha.org") || (teacher && teacher.school_name)) {
       role = ROLES.ASHATEACHER;
     } else {
-      role = process.env.GOOGLE_OAUTH_DEFAULT_ROLE || ROLES.GUEST;
+      role = process.env.GOOGLE_OAUTH_DEFAULT_ROLE || ROLES.ASHATEACHER;
     }
+    console.log(`[OAuth] Authenticated Google user: ${normalizedEmail} (Assigned Role: ${role})`);
 
     // Auto-provision teacher profile if not yet in database
     if (!teacher) {
