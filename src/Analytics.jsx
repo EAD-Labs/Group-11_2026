@@ -168,10 +168,10 @@ function OverviewTab({ refreshKey, onSyncStatus }) {
             <CartesianGrid strokeDasharray="3 6" stroke="#263354" vertical={false} />
             <XAxis dataKey="class" tick={{ fontSize: 12, fill: "#93A0BE" }} axisLine={{ stroke: "#263354" }} tickLine={false} />
             <YAxis tick={{ fontSize: 12, fill: "#93A0BE" }} axisLine={false} tickLine={false} unit="%" />
-            <Tooltip content={<CustomTooltip suffix="%" />} cursor={{ fill: "rgba(94,234,212,0.06)" }} />
+            <Tooltip content={<CustomTooltip suffix="%" />} cursor={false} />
             <Legend wrapperStyle={{ fontSize: 13 }} />
             {subjects.map((s) => (
-              <Bar key={s} dataKey={s} fill={subjectColor(s)} radius={[6, 6, 0, 0]} maxBarSize={36} />
+              <Bar key={s} dataKey={s} fill={subjectColor(s)} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={{ filter: "brightness(1.2)", stroke: "rgba(255,255,255,0.5)", strokeWidth: 1 }} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -249,10 +249,10 @@ function PerformanceTab({ refreshKey, onSyncStatus }) {
             <CartesianGrid strokeDasharray="3 6" stroke="#263354" vertical={false} />
             <XAxis dataKey="class" tick={{ fontSize: 12, fill: "#93A0BE" }} axisLine={{ stroke: "#263354" }} tickLine={false} />
             <YAxis tick={{ fontSize: 12, fill: "#93A0BE" }} axisLine={false} tickLine={false} unit="%" />
-            <Tooltip content={<CustomTooltip suffix="%" />} cursor={{ fill: "rgba(94,234,212,0.06)" }} />
+            <Tooltip content={<CustomTooltip suffix="%" />} cursor={false} />
             <Legend wrapperStyle={{ fontSize: 13 }} />
             {subjects.map((s) => (
-              <Bar key={s} dataKey={s} fill={subjectColor(s)} radius={[6, 6, 0, 0]} maxBarSize={36} />
+              <Bar key={s} dataKey={s} fill={subjectColor(s)} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={{ filter: "brightness(1.2)", stroke: "rgba(255,255,255,0.5)", strokeWidth: 1 }} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -750,8 +750,19 @@ function AssessmentAnalysisTab({ refreshKey, onSyncStatus }) {
                 <CartesianGrid strokeDasharray="3 6" stroke="#263354" vertical={false} />
                 <XAxis dataKey="q" tick={{ fontSize: 11, fill: "#93A0BE" }} axisLine={{ stroke: "#263354" }} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: "#93A0BE" }} axisLine={false} tickLine={false} unit="%" />
-                <Tooltip content={<CustomTooltip suffix="%" />} />
-                <Bar dataKey="avgPct" name="Avg score" fill="#60A5FA" radius={[6, 6, 0, 0]} maxBarSize={28} />
+                <Tooltip content={<CustomTooltip suffix="%" />} cursor={false} />
+                <Bar
+                  dataKey="avgPct"
+                  name="Avg score"
+                  fill={subjectColor(effectiveWSubject)}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={28}
+                  activeBar={{ filter: "brightness(1.2)", stroke: "rgba(255,255,255,0.5)", strokeWidth: 1 }}
+                >
+                  {writtenData.map((entry, idx) => (
+                    <Cell key={`cell-${idx}`} fill={STATUS_PALETTE[idx % STATUS_PALETTE.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

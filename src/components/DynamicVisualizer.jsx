@@ -2,6 +2,7 @@ import React from 'react';
 import {
   BarChart,
   Bar,
+  Cell,
   LineChart,
   Line,
   XAxis,
@@ -30,8 +31,48 @@ const ACCENT_COLORS = {
   amber: { bg: 'rgba(245, 158, 11, 0.12)', border: '#F59E0B', text: '#F59E0B' },
   violet: { bg: 'rgba(167, 139, 250, 0.12)', border: '#A78BFA', text: '#A78BFA' },
   emerald: { bg: 'rgba(52, 211, 153, 0.12)', border: '#34D399', text: '#34D399' },
-  rose: { bg: 'rgba(251, 113, 133, 0.12)', border: '#FB7185', text: '#FB7185' }
+  rose: { bg: 'rgba(251, 113, 133, 0.12)', border: '#FB7185', text: '#FB7185' },
+  blue: { bg: 'rgba(96, 165, 250, 0.12)', border: '#60A5FA', text: '#60A5FA' }
 };
+
+const THEME_PALETTE = [
+  '#5EEAD4', // Teal
+  '#60A5FA', // Sky Blue
+  '#FBBF24', // Amber Gold
+  '#A78BFA', // Soft Violet
+  '#34D399', // Emerald
+  '#FB7185', // Coral Rose
+  '#F472B6', // Pink
+  '#38BDF8'  // Cyan
+];
+
+const NAMED_THEME_COLORS = {
+  teal: '#5EEAD4',
+  amber: '#FBBF24',
+  violet: '#A78BFA',
+  emerald: '#34D399',
+  rose: '#FB7185',
+  blue: '#60A5FA',
+  maths: '#FBBF24',
+  english: '#5EEAD4',
+  tamil: '#A78BFA',
+  cs: '#60A5FA',
+  'computer science': '#60A5FA',
+  science: '#FB7185',
+  'social science': '#34D399',
+  evs: '#F472B6',
+  girls: '#FB7185',
+  boys: '#60A5FA'
+};
+
+function resolveThemeColor(colorOrLabel, idx = 0) {
+  if (typeof colorOrLabel === 'string') {
+    const clean = colorOrLabel.trim().toLowerCase();
+    if (NAMED_THEME_COLORS[clean]) return NAMED_THEME_COLORS[clean];
+    if (clean.startsWith('#') || clean.startsWith('rgb')) return colorOrLabel.trim();
+  }
+  return THEME_PALETTE[idx % THEME_PALETTE.length];
+}
 
 function parseTrend(widget = {}, displayValue = '', displaySub = '') {
   // 1. Explicit widget.trend ('up' | 'down' | 'growth' | 'decrease' | 'neutral')
@@ -363,7 +404,6 @@ function cleanChartData(raw) {
 function BarChartWidget({ widget }) {
   let rawData = widget.data || [];
   let series = widget.series || [];
-  const palette = ['#5EEAD4', '#F59E0B', '#A78BFA', '#34D399', '#FB7185', '#60A5FA'];
 
   // Normalize nested series if present
   if ((!rawData || rawData.length === 0) && series.length > 0 && series[0].data) {
@@ -381,7 +421,7 @@ function BarChartWidget({ widget }) {
 
   const data = cleanChartData(rawData);
   const { xKey, series: resolvedSeries } = resolveChartKeys(data, widget);
-  const barColor = widget.color || '#5EEAD4';
+  const primaryBarColor = resolveThemeColor(widget.color, 0);
 
   return (
     <div style={{
@@ -405,17 +445,21 @@ function BarChartWidget({ widget }) {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey={xKey} stroke="#94A3B8" fontSize={12} tickLine={false} />
-              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} domain={['auto', 'auto']} />
+              <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis dataKey={xKey} stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
               <Tooltip
+                cursor={false}
                 contentStyle={{
-                  background: '#0F1729',
-                  border: '1px solid #5EEAD4',
-                  borderRadius: '8px',
+                  background: '#0B1220',
+                  border: '1px solid rgba(94, 234, 212, 0.35)',
+                  borderRadius: '10px',
                   color: '#F8FAFC',
-                  fontSize: '0.85rem'
+                  fontSize: '0.85rem',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
                 }}
+                itemStyle={{ color: '#F8FAFC', fontWeight: 600 }}
+                labelStyle={{ color: '#94A3B8', fontWeight: 600, marginBottom: '4px' }}
                 formatter={(val, name) => [
                   typeof val === 'number' && val <= 100 && !String(name).toLowerCase().includes('count') && !String(name).toLowerCase().includes('total')
                     ? `${val}%`
@@ -427,11 +471,33 @@ function BarChartWidget({ widget }) {
                 <>
                   <Legend wrapperStyle={{ fontSize: '0.8rem', color: '#94A3B8' }} />
                   {resolvedSeries.map((s, idx) => (
-                    <Bar key={s.key} dataKey={s.key} name={s.name || s.key} fill={s.color || palette[idx % palette.length]} radius={[4, 4, 0, 0]} />
+                    <Bar
+                      key={s.key}
+                      dataKey={s.key}
+                      name={s.name || s.key}
+                      fill={resolveThemeColor(s.color || s.name || s.key, idx)}
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={44}
+                      activeBar={{ filter: 'brightness(1.2)', stroke: 'rgba(255,255,255,0.5)', strokeWidth: 1 }}
+                    />
                   ))}
                 </>
               ) : (
-                <Bar dataKey={resolvedSeries[0]?.key || 'value'} fill={barColor} radius={[4, 4, 0, 0]} name={resolvedSeries[0]?.name || 'Score'} />
+                <Bar
+                  dataKey={resolvedSeries[0]?.key || 'value'}
+                  fill={primaryBarColor}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={48}
+                  name={resolvedSeries[0]?.name || 'Score'}
+                  activeBar={{ filter: 'brightness(1.2)', stroke: 'rgba(255,255,255,0.5)', strokeWidth: 1 }}
+                >
+                  {data.map((entry, idx) => (
+                    <Cell
+                      key={`cell-${idx}`}
+                      fill={resolveThemeColor(entry?.color || entry?.[xKey], idx)}
+                    />
+                  ))}
+                </Bar>
               )}
             </BarChart>
           </ResponsiveContainer>
@@ -444,7 +510,6 @@ function BarChartWidget({ widget }) {
 function LineChartWidget({ widget }) {
   let rawData = widget.data || [];
   let series = widget.series || [];
-  const palette = ['#5EEAD4', '#F59E0B', '#A78BFA', '#34D399', '#FB7185', '#60A5FA'];
 
   // Normalize nested series if present
   if ((!rawData || rawData.length === 0) && series.length > 0 && series[0].data) {
@@ -485,17 +550,21 @@ function LineChartWidget({ widget }) {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey={xKey} stroke="#94A3B8" fontSize={12} tickLine={false} />
-              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} domain={['auto', 'auto']} />
+              <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis dataKey={xKey} stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
               <Tooltip
+                cursor={{ stroke: 'rgba(94, 234, 212, 0.25)', strokeWidth: 1, strokeDasharray: '4 4' }}
                 contentStyle={{
-                  background: '#0F1729',
-                  border: '1px solid #F59E0B',
-                  borderRadius: '8px',
+                  background: '#0B1220',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: '10px',
                   color: '#F8FAFC',
-                  fontSize: '0.85rem'
+                  fontSize: '0.85rem',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
                 }}
+                itemStyle={{ color: '#F8FAFC', fontWeight: 600 }}
+                labelStyle={{ color: '#94A3B8', fontWeight: 600, marginBottom: '4px' }}
                 formatter={(val, name) => [
                   typeof val === 'number' && val <= 100 && !String(name).toLowerCase().includes('count') && !String(name).toLowerCase().includes('total')
                     ? `${val}%`
@@ -506,18 +575,21 @@ function LineChartWidget({ widget }) {
               {resolvedSeries.length > 1 && (
                 <Legend wrapperStyle={{ fontSize: '0.8rem', color: '#94A3B8' }} />
               )}
-              {resolvedSeries.map((s, idx) => (
-                <Line
-                  key={s.key}
-                  type="monotone"
-                  dataKey={s.key}
-                  name={s.name || s.key}
-                  stroke={s.color || palette[idx % palette.length]}
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: s.color || palette[idx % palette.length] }}
-                  activeDot={{ r: 6 }}
-                />
-              ))}
+              {resolvedSeries.map((s, idx) => {
+                const lineCol = resolveThemeColor(s.color || s.name || s.key, idx);
+                return (
+                  <Line
+                    key={s.key}
+                    type="monotone"
+                    dataKey={s.key}
+                    name={s.name || s.key}
+                    stroke={lineCol}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: lineCol }}
+                    activeDot={{ r: 6 }}
+                  />
+                );
+              })}
             </LineChart>
           </ResponsiveContainer>
         )}
