@@ -9,7 +9,7 @@ import FloatingChatWidget from './components/FloatingChatWidget.jsx'
 import { canAccessRoute } from './utils/rbacGuard'
 
 // Google OAuth Client ID (set via VITE_GOOGLE_CLIENT_ID or fallback to placeholder)
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '1047123456789-placeholder.apps.googleusercontent.com'
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '243068372849-remignv15mrub27mci97l0qdrlk15icq.apps.googleusercontent.com'
 
 function RootView() {
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname)

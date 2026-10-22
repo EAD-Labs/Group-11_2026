@@ -447,7 +447,7 @@ function BarChartWidget({ widget }) {
             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis dataKey={xKey} stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
-              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+              <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} domain={[0, 'auto']} />
               <Tooltip
                 cursor={false}
                 contentStyle={{
