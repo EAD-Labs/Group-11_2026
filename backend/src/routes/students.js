@@ -13,6 +13,19 @@ router.get("/", async (req, res) => {
        FROM students WHERE teacher_id = $1 ORDER BY class_level, name`,
       [req.teacherId]
     );
+
+    // If this is a demo teacher or zero students are returned in demo mode, serve pre-seeded demo roster
+    if (result.rows.length === 0 && String(req.teacherId).startsWith("demo-")) {
+      const demoStudents = [
+        { id: "demo-st-1", name: "Ananya S", class_level: 4, avatar_seed: "ananya" },
+        { id: "demo-st-2", name: "Karthik R", class_level: 4, avatar_seed: "karthik" },
+        { id: "demo-st-3", name: "Muthu V", class_level: 3, avatar_seed: "muthu" },
+        { id: "demo-st-4", name: "Divya M", class_level: 4, avatar_seed: "divya" },
+        { id: "demo-st-5", name: "Suresh K", class_level: 5, avatar_seed: "suresh" }
+      ];
+      return res.json({ students: demoStudents });
+    }
+
     res.json({ students: result.rows });
   } catch (err) {
     console.error("list students error", err);

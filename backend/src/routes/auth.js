@@ -13,7 +13,7 @@ const REFRESH_TTL_DAYS = 30;
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 20,
   message: { error: "Too many login attempts. Try again in a few minutes." },
 });
 
@@ -294,11 +294,22 @@ router.get("/me", rbacMiddleware({ required: true }), async (req, res) => {
     const teacherId = req.userScope?.teacherId;
     let teacher = null;
     if (teacherId) {
-      const result = await pool.query(
-        "SELECT id, name, email, school_name FROM teachers WHERE id::text = $1 OR email = $1",
-        [teacherId]
-      );
-      teacher = result.rows[0];
+      if (String(teacherId).startsWith("demo-")) {
+        const isCoord = String(teacherId).includes("coord");
+        teacher = {
+          id: teacherId,
+          name: isCoord ? "Rajesh Kannan (State Coordinator)" : "Priya Ramesh (Asha Teacher)",
+          email: isCoord ? "coordinator@asha.org" : "priya.ramesh@asha.org",
+          school_name: isCoord ? "State Operations (All Schools)" : "PUPS Thiruvallur",
+          role: req.userScope.role
+        };
+      } else {
+        const result = await pool.query(
+          "SELECT id, name, email, school_name FROM teachers WHERE id::text = $1 OR email = $1",
+          [teacherId]
+        );
+        teacher = result.rows[0];
+      }
     }
 
     res.json({
@@ -311,6 +322,50 @@ router.get("/me", rbacMiddleware({ required: true }), async (req, res) => {
     console.error("auth me error", err);
     res.status(500).json({ error: "Could not retrieve user profile" });
   }
+});
+
+// POST /api/auth/demo — 1-Click test persona login for evaluators and booth visitors
+router.post("/demo", (req, res) => {
+  const { persona = "teacher" } = req.body || {};
+
+  if (persona === "coordinator" || persona === "admin") {
+    const coordUser = {
+      id: "demo-coord-1",
+      name: "Rajesh Kannan (State Coordinator)",
+      email: "coordinator@asha.org",
+      school_name: "State Operations (All Schools)",
+      role: ROLES.ADMIN,
+      isMasked: false
+    };
+    const accessToken = signAccessToken(coordUser.id, ROLES.ADMIN, null);
+    return res.json({
+      accessToken,
+      role: ROLES.ADMIN,
+      schoolId: null,
+      isMasked: false,
+      teacher: coordUser,
+      user: coordUser
+    });
+  }
+
+  // Default: Asha Teacher (Priya Ramesh - PUPS Thiruvallur)
+  const teacherUser = {
+    id: "demo-teacher-1",
+    name: "Priya Ramesh (Asha Teacher)",
+    email: "priya.ramesh@asha.org",
+    school_name: "PUPS Thiruvallur",
+    role: ROLES.ASHATEACHER,
+    isMasked: false
+  };
+  const accessToken = signAccessToken(teacherUser.id, ROLES.ASHATEACHER, "PUPS Thiruvallur");
+  return res.json({
+    accessToken,
+    role: ROLES.ASHATEACHER,
+    schoolId: "PUPS Thiruvallur",
+    isMasked: false,
+    teacher: teacherUser,
+    user: teacherUser
+  });
 });
 
 // POST /api/auth/guest-token - Issues a temporary token with GUEST role for read-only masked analytics

@@ -6,11 +6,13 @@ import {
   Search, CheckCircle2, Circle, ExternalLink, ChevronLeft,
   GraduationCap, BarChart3, Menu, X, Compass, Star, MapPin,
   User, LogOut, UserPlus, Plus, Loader2, AlertCircle, Mail, Lock, Eye, EyeOff,
-  HardDrive, Download, WifiOff
+  HardDrive, Download, WifiOff, Smartphone, QrCode
 } from "lucide-react";
 import { SCHOOLS, STUDENTS_BY_SCHOOL } from "./schoolsData";
 import OfflineBanner from "./components/OfflineBanner";
 import OfflineManagerModal from "./components/OfflineManagerModal";
+import QRCodeModal from "./components/QRCodeModal";
+import L5ReportModal from "./components/L5ReportModal";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
 import {
   saveClassTrail,
@@ -555,6 +557,8 @@ function AccountPanel({
   onRegister,
   onGoogleLogin,
   onLogout,
+  onDemoLogin,
+  onOpenL5Report,
   students,
   studentsLoading,
   selectedStudentId,
@@ -646,6 +650,87 @@ function AccountPanel({
               </div>
             </div>
           )}
+
+                    {/* Evaluator 1-Click Test Persona Quick Access */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(94, 234, 212, 0.08), rgba(99, 102, 241, 0.08))',
+            border: '1px solid rgba(94, 234, 212, 0.25)',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            margin: '12px 0 16px 0',
+            textAlign: 'left'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: '#5EEAD4', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              <Sparkles size={14} /> Evaluator 1-Click Demo Profiles
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => onDemoLogin && onDemoLogin("teacher")}
+                disabled={authLoading}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '8px',
+                  padding: '8px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: '#F8FAFC',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <span>👩‍🏫 <strong>Asha Teacher</strong> (Priya — Thiruvallur)</span>
+                <span style={{ fontSize: '0.72rem', color: '#5EEAD4' }}>Try →</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onDemoLogin && onDemoLogin("coordinator")}
+                disabled={authLoading}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '8px',
+                  padding: '8px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: '#F8FAFC',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <span>📊 <strong>State Coordinator</strong> (Full AI & Analytics)</span>
+                <span style={{ fontSize: '0.72rem', color: '#60A5FA' }}>Try →</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onDemoLogin && onDemoLogin("student")}
+                disabled={authLoading}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '8px',
+                  padding: '8px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: '#F8FAFC',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <span>🎓 <strong>Student Group Trail</strong> (Class 4 Math)</span>
+                <span style={{ fontSize: '0.72rem', color: '#FBBF24' }}>Explore →</span>
+              </button>
+            </div>
+          </div>
 
           <form onSubmit={submitAuth} className="account-form">
             {mode === "register" && (
@@ -755,6 +840,45 @@ function AccountPanel({
           </button>
         </div>
 
+                {/* L5 Daily Session Report Quick Action */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(94, 234, 212, 0.08), rgba(52, 211, 153, 0.08))',
+          border: '1px solid rgba(94, 234, 212, 0.25)',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          margin: '12px 0 16px 0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px'
+        }}>
+          <div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#5EEAD4', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={15} /> Level 5 (L5) Daily Session Report
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px' }}>
+              Automated from classroom milestone completions — zero manual paperwork
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenL5Report}
+            style={{
+              background: 'rgba(94, 234, 212, 0.15)',
+              border: '1px solid #5EEAD4',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              color: '#5EEAD4',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            View L5 Report →
+          </button>
+        </div>
+
         <div className="students-section">
           <h4>Students</h4>
           {studentsLoading && <p className="muted-text">Loading students…</p>}
@@ -857,6 +981,8 @@ export default function App({ initialAuthNotice }) {
 
   // --- Offline Storage & Download Management State ---
   const [offlineModalOpen, setOfflineModalOpen] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [l5ModalOpen, setL5ModalOpen] = useState(false);
   const [cachedClasses, setCachedClasses] = useState([]);
   const [isDownloadingClass, setIsDownloadingClass] = useState(false);
 
@@ -1104,6 +1230,42 @@ export default function App({ initialAuthNotice }) {
       localStorage.setItem("kp_user", JSON.stringify(data.user));
       if (typeof window !== "undefined") {
         window.history.replaceState({ authenticated: true }, document.title, window.location.href);
+      }
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+    async function handleDemoLogin(persona) {
+    if (persona === "student") {
+      goHome();
+      setSelectedClass(4);
+      setSelectedTerm("I");
+      setView("home");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const data = await apiFetch("/api/auth/demo", {
+        method: "POST",
+        body: { persona }
+      });
+      const user = data.teacher || data.user;
+      setTeacher(user);
+      setAccessToken(data.accessToken);
+      localStorage.setItem("kp_token", data.accessToken);
+      localStorage.setItem("kp_user", JSON.stringify(user));
+      if (typeof window !== "undefined") {
+        window.history.replaceState({ authenticated: true }, document.title, window.location.href);
+      }
+      if (persona === "coordinator" || persona === "admin") {
+        navigateWithRBAC("/insights");
+      } else {
+        goHome();
+        setSelectedClass(4);
       }
     } catch (err) {
       setAuthError(err.message);
@@ -2160,6 +2322,8 @@ export default function App({ initialAuthNotice }) {
             onRegister={handleRegister}
             onGoogleLogin={handleGoogleLogin}
             onLogout={handleLogout}
+            onDemoLogin={handleDemoLogin}
+            onOpenL5Report={() => setL5ModalOpen(true)}
             students={students}
             studentsLoading={studentsLoading}
             selectedStudentId={selectedStudentId}
