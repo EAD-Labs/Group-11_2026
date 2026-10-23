@@ -653,81 +653,177 @@ function AccountPanel({
 
                     {/* Evaluator 1-Click Test Persona Quick Access */}
           <div style={{
-            background: 'linear-gradient(135deg, rgba(94, 234, 212, 0.08), rgba(99, 102, 241, 0.08))',
-            border: '1px solid rgba(94, 234, 212, 0.25)',
-            borderRadius: '12px',
-            padding: '12px 14px',
-            margin: '12px 0 16px 0',
+            background: '#0F172A',
+            border: '1.5px solid #0D9488',
+            borderRadius: '14px',
+            padding: '14px 16px',
+            margin: '16px 0 20px 0',
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.15)',
             textAlign: 'left'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: '#5EEAD4', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-              <Sparkles size={14} /> Evaluator 1-Click Demo Profiles
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.78rem',
+              fontWeight: 800,
+              color: '#5EEAD4',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              marginBottom: '10px'
+            }}>
+              <Sparkles size={15} color="#5EEAD4" /> Evaluator 1-Click Demo Profiles
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Option 1: Asha Teacher */}
               <button
                 type="button"
                 onClick={() => onDemoLogin && onDemoLogin("teacher")}
                 disabled={authLoading}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: '8px',
-                  padding: '8px 10px',
+                  background: '#1E293B',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  color: '#F8FAFC',
-                  fontSize: '0.8rem',
+                  gap: '12px',
                   cursor: 'pointer',
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}
               >
-                <span>👩‍🏫 <strong>Asha Teacher</strong> (Priya — Thiruvallur)</span>
-                <span style={{ fontSize: '0.72rem', color: '#5EEAD4' }}>Try →</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>👩‍🏫</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.25 }}>
+                      Asha Teacher
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.25 }}>
+                      Priya Ramesh • PUPS Thiruvallur
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#5EEAD4',
+                  background: 'rgba(94, 234, 212, 0.14)',
+                  border: '1px solid rgba(94, 234, 212, 0.35)',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                  <span>Try</span>
+                  <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>→</span>
+                </div>
               </button>
 
+              {/* Option 2: State Coordinator */}
               <button
                 type="button"
                 onClick={() => onDemoLogin && onDemoLogin("coordinator")}
                 disabled={authLoading}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: '8px',
-                  padding: '8px 10px',
+                  background: '#1E293B',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  color: '#F8FAFC',
-                  fontSize: '0.8rem',
+                  gap: '12px',
                   cursor: 'pointer',
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}
               >
-                <span>📊 <strong>State Coordinator</strong> (Full AI & Analytics)</span>
-                <span style={{ fontSize: '0.72rem', color: '#60A5FA' }}>Try →</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>📊</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.25 }}>
+                      State Coordinator
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.25 }}>
+                      Full Live Analytics & AI Visualizer
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#60A5FA',
+                  background: 'rgba(96, 165, 250, 0.14)',
+                  border: '1px solid rgba(96, 165, 250, 0.35)',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                  <span>Try</span>
+                  <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>→</span>
+                </div>
               </button>
 
+              {/* Option 3: Student Group Trail */}
               <button
                 type="button"
                 onClick={() => onDemoLogin && onDemoLogin("student")}
                 disabled={authLoading}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: '8px',
-                  padding: '8px 10px',
+                  background: '#1E293B',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  color: '#F8FAFC',
-                  fontSize: '0.8rem',
+                  gap: '12px',
                   cursor: 'pointer',
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}
               >
-                <span>🎓 <strong>Student Group Trail</strong> (Class 4 Math)</span>
-                <span style={{ fontSize: '0.72rem', color: '#FBBF24' }}>Explore →</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>🎓</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.25 }}>
+                      Student Group Trail
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.25 }}>
+                      Class 4 Math • 8-Phase Learning Trail
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: '#FBBF24',
+                  background: 'rgba(251, 191, 36, 0.14)',
+                  border: '1px solid rgba(251, 191, 36, 0.35)',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}>
+                  <span>Explore</span>
+                  <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>→</span>
+                </div>
               </button>
             </div>
           </div>
@@ -842,21 +938,22 @@ function AccountPanel({
 
                 {/* L5 Daily Session Report Quick Action */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(94, 234, 212, 0.08), rgba(52, 211, 153, 0.08))',
-          border: '1px solid rgba(94, 234, 212, 0.25)',
-          borderRadius: '10px',
+          background: '#0F172A',
+          border: '1.5px solid #0D9488',
+          borderRadius: '12px',
           padding: '12px 14px',
-          margin: '12px 0 16px 0',
+          margin: '12px 0 18px 0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '12px'
+          gap: '12px',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.12)'
         }}>
           <div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#5EEAD4', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <FileText size={15} /> Level 5 (L5) Daily Session Report
+            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#5EEAD4', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <FileText size={16} color="#5EEAD4" /> Level 5 (L5) Daily Session Report
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px' }}>
               Automated from classroom milestone completions — zero manual paperwork
             </div>
           </div>
@@ -864,18 +961,23 @@ function AccountPanel({
             type="button"
             onClick={onOpenL5Report}
             style={{
-              background: 'rgba(94, 234, 212, 0.15)',
+              background: 'rgba(94, 234, 212, 0.14)',
               border: '1px solid #5EEAD4',
-              borderRadius: '6px',
-              padding: '6px 12px',
+              borderRadius: '8px',
+              padding: '7px 12px',
               color: '#5EEAD4',
-              fontSize: '0.75rem',
+              fontSize: '0.78rem',
               fontWeight: 700,
               cursor: 'pointer',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              flexShrink: 0
             }}
           >
-            View L5 Report →
+            <span>View L5 Report</span>
+            <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>→</span>
           </button>
         </div>
 
