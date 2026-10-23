@@ -278,21 +278,21 @@ export default function L5ReportModal({ isOpen, onClose, teacher }) {
         {/* Impact Highlights Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '12px',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: '14px',
           marginBottom: '20px'
         }}>
           <div style={{
             background: 'rgba(94, 234, 212, 0.08)',
             border: '1px solid rgba(94, 234, 212, 0.25)',
             borderRadius: '10px',
-            padding: '12px',
+            padding: '14px',
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#5EEAD4', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#5EEAD4', fontFamily: 'monospace' }}>
               {r.classroomMetrics.totalLearnersEngaged}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: '4px' }}>
               Learners Engaged ({r.classroomMetrics.totalStudentGroups} Groups)
             </div>
           </div>
@@ -301,29 +301,14 @@ export default function L5ReportModal({ isOpen, onClose, teacher }) {
             background: 'rgba(245, 158, 11, 0.08)',
             border: '1px solid rgba(245, 158, 11, 0.25)',
             borderRadius: '10px',
-            padding: '12px',
+            padding: '14px',
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#FBBF24', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#FBBF24', fontFamily: 'monospace' }}>
               {r.classroomMetrics.totalMilestonesAchieved}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: '4px' }}>
               Milestones Achieved
-            </div>
-          </div>
-
-          <div style={{
-            background: 'rgba(52, 211, 153, 0.08)',
-            border: '1px solid rgba(52, 211, 153, 0.25)',
-            borderRadius: '10px',
-            padding: '12px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>
-              45 mins
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: '2px' }}>
-              Manual Paperwork Saved Today
             </div>
           </div>
         </div>
@@ -376,24 +361,6 @@ export default function L5ReportModal({ isOpen, onClose, teacher }) {
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        {/* Offline Resilience Telemetry */}
-        <div style={{
-          background: 'rgba(99, 102, 241, 0.08)',
-          border: '1px solid rgba(99, 102, 241, 0.25)',
-          borderRadius: '10px',
-          padding: '12px 14px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <Wifi size={24} color="#818CF8" />
-          <div style={{ fontSize: '0.78rem', lineHeight: 1.4 }}>
-            <span style={{ fontWeight: 700, color: '#A5B4FC' }}>Store & Forward Telemetry: </span>
-            {r.connectivityTelemetry.offlineSessionsDelivered} • {r.connectivityTelemetry.networkResilienceOutbox}
           </div>
         </div>
 
