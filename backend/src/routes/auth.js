@@ -300,7 +300,7 @@ router.get("/me", rbacMiddleware({ required: true }), async (req, res) => {
           id: teacherId,
           name: isCoord ? "Rajesh Kannan (State Coordinator)" : "Priya Ramesh (Asha Teacher)",
           email: isCoord ? "coordinator@asha.org" : "priya.ramesh@asha.org",
-          school_name: isCoord ? "State Operations (All Schools)" : "PUPS Thiruvallur",
+          school_name: isCoord ? "State Operations (All Schools)" : "PUPS Ammambakkam",
           role: req.userScope.role
         };
       } else {
@@ -353,11 +353,11 @@ router.post("/demo", (req, res) => {
     id: "demo-teacher-1",
     name: "Priya Ramesh (Asha Teacher)",
     email: "priya.ramesh@asha.org",
-    school_name: "PUPS Thiruvallur",
+    school_name: "PUPS Ammambakkam",
     role: ROLES.ASHATEACHER,
     isMasked: false
   };
-  const accessToken = signAccessToken(teacherUser.id, ROLES.ASHATEACHER, "PUPS Thiruvallur");
+  const accessToken = signAccessToken(teacherUser.id, ROLES.ASHATEACHER, "PUPS Ammambakkam");
   return res.json({
     accessToken,
     role: ROLES.ASHATEACHER,

@@ -579,7 +579,10 @@ function AccountPanel({
   // Students already on this teacher's roster, so they can't be picked again
   // from the dropdown below.
   const takenNames = new Set(students.map((s) => s.name));
-  const schoolRoster = studentsBySchool[teacher?.school_name] || [];
+  const schoolRoster = studentsBySchool[teacher?.school_name]
+    || Object.entries(studentsBySchool).find(([sch]) => teacher?.school_name && (sch.toLowerCase().includes(teacher.school_name.toLowerCase()) || teacher.school_name.toLowerCase().includes(sch.toLowerCase())))?.[1]
+    || Object.values(studentsBySchool)[0]
+    || [];
   const availableStudents = schoolRoster.filter((s) => !takenNames.has(s.name));
 
   function submitAuth(e) {
@@ -703,7 +706,7 @@ function AccountPanel({
                       Asha Teacher
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px', lineHeight: 1.25 }}>
-                      Priya Ramesh • PUPS Thiruvallur
+                      Priya Ramesh • PUPS Ammambakkam
                     </div>
                   </div>
                 </div>
@@ -2448,6 +2451,19 @@ export default function App({ initialAuthNotice }) {
         onManifestChange={(manifest) => {
           setCachedClasses(manifest.map((item) => String(item.classId)));
         }}
+      />
+
+      {/* Mobile QR Code Modal */}
+      <QRCodeModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+      />
+
+      {/* Level 5 (L5) Daily Session & Donor Compliance Report */}
+      <L5ReportModal
+        isOpen={l5ModalOpen}
+        onClose={() => setL5ModalOpen(false)}
+        teacher={teacher}
       />
     </div>
   );
