@@ -4,7 +4,6 @@ import {
   X,
   Download,
   Printer,
-  CheckCircle2,
   Clock,
   School,
   User,
@@ -208,20 +207,7 @@ export default function L5ReportModal({ isOpen, onClose, teacher }) {
               textTransform: 'uppercase',
               letterSpacing: '0.5px'
             }}>
-              Track P1: Automated Telemetry
-            </span>
-            <span style={{
-              background: 'rgba(52, 211, 153, 0.15)',
-              color: '#34D399',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}>
-              <CheckCircle2 size={12} /> {r.donorCompliance.status}
+              Automated Telemetry
             </span>
           </div>
 
