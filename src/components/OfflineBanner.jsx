@@ -7,6 +7,7 @@ export default function OfflineBanner({ onOpenOfflineManager }) {
   const [showRestored, setShowRestored] = useState(false);
   const [prevStatus, setPrevStatus] = useState(status);
   const [isChecking, setIsChecking] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     if (prevStatus === 'OFFLINE' && (status === 'ONLINE_HIGH_SPEED' || status === 'ONLINE_SLOW')) {
@@ -24,7 +25,7 @@ export default function OfflineBanner({ onOpenOfflineManager }) {
   };
 
   // If fully online and restored toast has expired, don't show anything
-  if (status === 'ONLINE_HIGH_SPEED' && !showRestored) {
+  if (dismissed || (status === 'ONLINE_HIGH_SPEED' && !showRestored)) {
     return null;
   }
 
@@ -85,6 +86,25 @@ export default function OfflineBanner({ onOpenOfflineManager }) {
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '24px',
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'inherit',
+            cursor: 'pointer'
+          }}
+          title="Dismiss warning"
+        >
+          ✕
+        </button>
         {onOpenOfflineManager && (
           <button
             type="button"

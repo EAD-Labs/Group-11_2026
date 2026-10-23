@@ -17,7 +17,7 @@ export function useNetworkStatus() {
       : null;
 
     const effectiveType = conn?.effectiveType || 'unknown';
-    const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g' || (conn?.rtt && conn.rtt > 1500);
+    const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g' || (conn?.rtt && conn.rtt > 4000 && effectiveType !== '4g');
 
     return {
       isOnline: isNavigatorOnline,
@@ -55,7 +55,7 @@ export function useNetworkStatus() {
       clearTimeout(timeoutId);
       const latency = Math.round(performance.now() - probeStart);
 
-      const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g' || latency > 1500;
+      const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g' || (latency > 4000 && effectiveType !== '4g');
 
       if (res.ok) {
         setNetworkState({

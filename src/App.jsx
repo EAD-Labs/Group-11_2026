@@ -2337,6 +2337,22 @@ export default function App({ initialAuthNotice }) {
             <Sparkles size={16} /> AI Visualizer
           </button>
           <button
+            type="button"
+            className="nav-btn"
+            onClick={() => { setL5ModalOpen(true); setNavOpen(false); }}
+            title="Automated Level 5 (L5) Daily Session & Donor Impact Report"
+          >
+            <FileText size={16} /> L5 Report
+          </button>
+          <button
+            type="button"
+            className="nav-btn"
+            onClick={() => { setQrModalOpen(true); setNavOpen(false); }}
+            title="Scan QR Code to open on mobile phone"
+          >
+            <Smartphone size={16} /> Mobile
+          </button>
+          <button
             className={"nav-btn" + (view === "account" ? " nav-btn-active" : "")}
             onClick={openAccount}
           >
