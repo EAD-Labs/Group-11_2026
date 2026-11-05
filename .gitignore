@@ -42,10 +42,13 @@ Asha_Insights_HLD_Contract_final.txt
 screenshots/
 poster.html
 *.pdf
+*.zip
 *Poster*
 *poster*
 scripts/
 
-# Local preparation and defense dossiers
+# Local preparation, defense dossiers, and scratch tests
 *dossier*
 *DOSSIER*
+backend/README_BACKEND.md
+backend/scripts/test_*.js
