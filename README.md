@@ -1,12 +1,10 @@
 # Kanini Padhai & Asha Insights
 
-> ### 🌐 [View Project Introduction Page (For Non-Technical Visitors) &rarr;](https://asha-kanini-mu.vercel.app/intro.html)
-> *New to this project? Start with our **[Project Introduction Webpage](https://asha-kanini-mu.vercel.app/intro.html)** (source: [`public/intro.html`](./public/intro.html)) for a plain-language overview of the rural education challenge, target users, and how our solution works.*
+> ### 🌐 [View Project Introduction Page &rarr;](https://asha-kanini-mu.vercel.app/intro.html)
+> *Start with our **[Project Introduction Webpage](https://asha-kanini-mu.vercel.app/intro.html)** (source: [`public/intro.html`](./public/intro.html)) for an overview of the rural education challenge, target users, and how our solution works.*
 >
 > ### 🚀 [Launch Live Application &rarr;](https://asha-kanini-mu.vercel.app)
-> - **Learning Trail (Teacher App):** [https://asha-kanini-mu.vercel.app](https://asha-kanini-mu.vercel.app)
-> - **6-Tab Analytics Dashboard:** [https://asha-kanini-mu.vercel.app/analytics](https://asha-kanini-mu.vercel.app/analytics)
-> - **AI Visualizer (Asha Insights):** [https://asha-kanini-mu.vercel.app/insights](https://asha-kanini-mu.vercel.app/insights)
+> - **Main Application Entry:** [https://asha-kanini-mu.vercel.app](https://asha-kanini-mu.vercel.app) *(Access the Learning Trail, Analytics Dashboard, and AI Visualizer directly from the top navigation bar).*
 
 ---
 
@@ -25,9 +23,9 @@ Across rural and panchayat primary schools in Tamil Nadu, educators face three p
 
 | Target User | Primary Module | What It Does |
 | :--- | :--- | :--- |
-| **Volunteer Teachers & Tutors** | **The Learning Trail** (`/`) | Organizes **958+ bilingual resources** (Diksha, Khan Academy, Math Playground, etc.) across **Classes 1–8** and **Terms I–III** following a **Concrete → Representational → Abstract (CRA)** progression. Includes **1-click IndexedDB offline caching** and per-student progress tracking that automatically syncs when internet returns. |
-| **School Principals & NGO Coordinators** | **Analytics Dashboard** (`/analytics`) | A **6-tab longitudinal dashboard** analyzing multi-year Asha Annual Assessment (AAA) data across **62 schools**: program KPIs, School Average heatmaps, Top/Bottom 10 rankings, **Oral vs. Written progression analysis**, socioeconomic influences, and automated **L5 Impact Reports**. |
-| **Education Analysts & Leadership** | **AI Visualizer** (`/insights`) | A conversational analytics copilot powered by deterministic SQL/tool execution (Gemini / Llama 3.3 70B). Users ask plain-English questions (e.g., *"Compare Maths and English trends across classes"*) to generate verified multi-chart layouts with role-based privacy masking. |
+| **Volunteer Teachers & Tutors** | **The Learning Trail** | Organizes **958+ bilingual resources** (Diksha, Khan Academy, Math Playground, etc.) across **Classes 1–8** and **Terms I–III** following a **Concrete → Representational → Abstract (CRA)** progression. Includes **1-click IndexedDB offline caching** and per-student progress tracking that automatically syncs when internet returns. |
+| **School Principals & NGO Coordinators** | **Analytics Dashboard** | A **6-tab longitudinal dashboard** analyzing multi-year Asha Annual Assessment (AAA) data across **62 schools**: program KPIs, School Average heatmaps, Top/Bottom 10 rankings, **Oral vs. Written progression analysis**, socioeconomic influences, and automated **L5 Impact Reports**. |
+| **Education Analysts & Leadership** | **AI Visualizer** | A conversational analytics copilot powered by deterministic SQL/tool execution (Gemini / Llama 3.3 70B). Users ask plain-English questions (e.g., *"Compare Maths and English trends across classes"*) to generate verified multi-chart layouts with role-based privacy masking. |
 
 ---
 
@@ -84,10 +82,10 @@ See [`backend/README.md`](./backend/README.md) for detailed environment variable
 ```text
 .
 ├── public/
-│   ├── intro.html                  # Non-technical Project Introduction Landing Page
+│   ├── intro.html                  # Project Introduction Landing Page
 │   └── favicon.svg
 ├── src/
-│   ├── main.jsx                    # Application entry & RBAC route guard (/, /analytics, /insights)
+│   ├── main.jsx                    # Application entry & RBAC route guard
 │   ├── App.jsx                     # Bilingual Learning Trail, Student Tracker & Auth views
 │   ├── Analytics.jsx               # 6-Tab Longitudinal Assessment Analytics Dashboard
 │   ├── InsightsPage.jsx            # Conversational AI Visualizer (Asha Insights)
